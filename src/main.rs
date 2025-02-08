@@ -31,7 +31,7 @@ fn main() {
     println!("Evolutionary algorithm training completed in: {:.4} seconds", secs);
 
     plot_map(&best_solution, &instance.patients, &instance.depot);
-    let _ = utils::create_file::save_solution_to_file(&best_solution, "solution.json");
+    let _ = utils::create_file::save_solution_to_file(&best_solution, "output/solution.json");
 }
 
 // Not used, better to use the heuristic approach
@@ -640,7 +640,7 @@ use plotters::{coord::types::RangedCoordf64, prelude::*};
 use std::f64::consts::PI;
 
 pub fn plot_map(solution: &Vec<Vec<usize>>, patients: &HashMap<String, Patient>, depot: &Depot) {
-    let output_path = "solution.png";
+    let output_path = "output/solution.png";
     let root = BitMapBackend::new(output_path, (900, 900)).into_drawing_area();
     root.fill(&WHITE).unwrap();
 
