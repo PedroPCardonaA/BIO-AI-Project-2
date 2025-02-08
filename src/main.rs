@@ -279,6 +279,28 @@ fn edge_crossover(parent1: &Vec<Vec<usize>>, parent2: &Vec<Vec<usize>>) -> Vec<V
     new_solution
 }
 
+
+pub fn mutate_relocate_patient(
+    individual: &mut Vec<Vec<usize>>,
+    mutation_probability: f64,
+) {
+    let mut rng = rand::rng();
+    let num_nurses = individual.len();
+    if num_nurses < 2 {
+        return;
+    }
+    for i in 0..num_nurses {
+        if !individual[i].is_empty() && rng.random::<f64>() < mutation_probability {
+            let patient_index = rng.random_range(0..individual[i].len());
+            let patient = individual[i].remove(patient_index);
+            let other_nurses: Vec<usize> = (0..num_nurses).filter(|&j| j != i).collect();
+            let target_nurse = *other_nurses.choose(&mut rng).unwrap();
+            let insertion_index = rng.random_range(0..=individual[target_nurse].len());
+            individual[target_nurse].insert(insertion_index, patient);
+        }
+    }
+}
+
 use plotters::{coord::types::RangedCoordf64, prelude::*};
 use std::f64::consts::PI;
 
