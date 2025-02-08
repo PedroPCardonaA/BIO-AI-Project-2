@@ -10,11 +10,12 @@ fn main() {
     
     let best_solution = evolutionary_algorithm(
         &instance,
-        100,
-        10000,
+        1000,
+        1000,
         5,
-        0.1,
-        0.1,
+        0.5,
+        1.2,
+        10
     );
 
     plot_map(&best_solution, &instance.patients, &instance.depot);
@@ -553,6 +554,7 @@ pub fn evolutionary_algorithm(
     tournament_size: usize,
     mutation_probability: f64,
     lambda: f64,
+    generation_to_print: usize,
 ) -> Vec<Vec<usize>> {
     // 1. Generate the initial population.
     let mut population = generate_population_heuristic_with_workload(population_size, instance);
@@ -565,6 +567,7 @@ pub fn evolutionary_algorithm(
     // Main loop: run for a fixed number of generations.
     for gen in 0..generations {
         let mut new_population = Vec::with_capacity(population_size);
+        
 
         // Elitism: carry over the best individual to the next generation.
         let best_index = fitness_values
@@ -606,7 +609,7 @@ pub fn evolutionary_algorithm(
             .iter()
             .cloned()
             .fold(f64::INFINITY, f64::min);
-        if (gen + 1) % 100 == 0 {
+        if (gen) % generation_to_print == 0 {
             println!("Generation {}: Best fitness = {}", gen, best_fit);
         }
     }
