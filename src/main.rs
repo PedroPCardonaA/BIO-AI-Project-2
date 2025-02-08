@@ -11,11 +11,11 @@ fn main() {
     let best_solution = evolutionary_algorithm(
         &instance,
         100,
-        5000,
+        1000,
         5,
-        0.2,
+        0.4,
         1.2,
-        100
+        10
     );
 
     plot_map(&best_solution, &instance.patients, &instance.depot);
@@ -295,8 +295,8 @@ fn edge_crossover(parent1: &Vec<Vec<usize>>, parent2: &Vec<Vec<usize>>) -> Vec<V
 fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
     let mut total_travel_time = 0.0;
     let mut total_penalty = 0.0;
-    let penalty_factor = 2.0; // Higher value means higher penalty
-    let penalty_factor_time = 6.0; // Higher value means higher penalty
+    let penalty_factor = 4.0; // Higher value means higher penalty
+    let penalty_factor_time = 10.0; // Higher value means higher penalty
 
     // Calculate the total travel time for each nurse
     let mut nurses = instance.nurses.clone();
@@ -328,7 +328,8 @@ fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
 
             // Check if the nurse visits the patient too late
             if patient.end_time < nurse.get_current_travel_time() {
-                total_penalty += penalty_factor * (nurse.get_current_travel_time() - patient.end_time);
+                //total_penalty += penalty_factor * (nurse.get_current_travel_time() - patient.end_time);
+                total_penalty += penalty_factor_time * 2000.0;
             }
 
             // Add the patient's demand to the nurse's current load
