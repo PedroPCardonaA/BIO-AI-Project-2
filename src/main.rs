@@ -3,6 +3,7 @@ use structs::instance::Instance;
 use ea_components::{crossover::route_preserving_crossover, generate_population::generate_population_heuristic_with_workload, mutation::mutate_relocate_patient, selection::tournament_selection};
 use utils::plot_map::plot_map;
 use std::{collections::HashMap, sync::{Arc, Mutex, RwLock}, thread};
+use utils::plot_metrics::plot_fitness;
 use std::time::Instant;
 
 mod structs;
@@ -16,7 +17,7 @@ fn main() {
     let best_solution = evolutionary_algorithm(
             &instance,
             100,
-            1000,
+            10000,
             5,
             0.7,
             1.2,
@@ -107,6 +108,12 @@ fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
     total_travel_time + total_penalty
 }
 
+/// Structure to hold the result from an island.
+pub struct IslandResult {
+    pub best_solution: Vec<Vec<usize>>,
+    pub fitness_history: Vec<f64>,
+}
+
 pub fn evolutionary_algorithm(
     instance: &Instance,
     population_size: usize,
@@ -123,7 +130,6 @@ pub fn evolutionary_algorithm(
     let sub_population_size = population_size / num_islands;
 
     // Wrap instance in an Arc so that it can be shared across threads.
-    // (This requires that Instance is Clone + Sync + Send.)
     let instance_arc = Arc::new(instance.clone());
 
     // Shared fitness cache: maps a (stringified) solution to its fitness value.
@@ -144,7 +150,7 @@ pub fn evolutionary_algorithm(
             let mut fitness_values: Vec<f64> = sub_population
                 .iter()
                 .map(|individual| {
-                    // Create a unique key for the solution (here we use a debug string).
+                    // Create a unique key for the solution.
                     let key = format!("{:?}", individual);
                     {
                         let cache_read = fitness_cache.read().unwrap();
@@ -158,6 +164,9 @@ pub fn evolutionary_algorithm(
                     fit
                 })
                 .collect();
+
+            // Record the best fitness per generation.
+            let mut fitness_history = Vec::new();
 
             // Main loop for this island.
             for gen in 0..generations {
@@ -191,7 +200,7 @@ pub fn evolutionary_algorithm(
                                 .unwrap()
                                 .0;
                             // Choose a random migrant from the pool.
-                            let mut rng = rand::rng();
+                            let mut rng = rand::thread_rng();
                             if let Some(migrant) = pool.choose(&mut rng) {
                                 sub_population[worst_index] = migrant.clone();
                                 // Recalculate fitness for the replaced solution using the cache.
@@ -264,7 +273,6 @@ pub fn evolutionary_algorithm(
                     })
                     .collect();
 
-                // Optionally print status.
                 if gen % generation_to_print == 0 {
                     let best_fit = fitness_values
                         .iter()
@@ -275,32 +283,45 @@ pub fn evolutionary_algorithm(
                         island_id, gen, best_fit
                     );
                 }
+                // Records the best fitness of this generation.
+                let best_fit = fitness_values
+                    .iter()
+                    .cloned()
+                    .fold(f64::INFINITY, f64::min);
+                fitness_history.push(best_fit);
             }
 
-            // Return the best solution from this island.
+            // Returns the best solution from this island along with its fitness history.
             let best_index = fitness_values
                 .iter()
                 .enumerate()
                 .min_by(|(_, &fit_a), (_, &fit_b)| fit_a.partial_cmp(&fit_b).unwrap())
                 .unwrap()
                 .0;
-            sub_population[best_index].clone()
+            IslandResult {
+                best_solution: sub_population[best_index].clone(),
+                fitness_history,
+            }
         });
         handles.push(handle);
     }
 
-    // Wait for all island threads to finish and select the overall best solution.
-    let mut best_solution = None;
+    // Waits for all island threads to finish and select the overall best solution.
+    let mut overall_best_solution = None;
     let mut best_fitness = f64::INFINITY;
-    for handle in handles {
-        let solution = handle.join().unwrap();
-        let sol_fit = fitness(&solution, instance);
+    let mut island_results = Vec::new();
+    for (island_id, handle) in handles.into_iter().enumerate() {
+        let result: IslandResult = handle.join().unwrap();
+        island_results.push((island_id, result.fitness_history.clone()));
+        let sol_fit = fitness(&result.best_solution, instance);
         if sol_fit < best_fitness {
             best_fitness = sol_fit;
-            best_solution = Some(solution);
+            overall_best_solution = Some(result.best_solution);
         }
     }
-    best_solution.unwrap()
-}
 
+    plot_fitness(&island_results);
+
+    overall_best_solution.unwrap()
+}
 
