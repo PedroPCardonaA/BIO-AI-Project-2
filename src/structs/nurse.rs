@@ -36,12 +36,4 @@ impl Nurse {
     pub fn set_current_travel_time(&mut self, current_travel_time: f64) {
         self.current_travel_time = current_travel_time;
     }
-
-    pub fn get_current_total_time(&self) -> f64 {
-        self.current_total_time
-    }
-
-    pub fn set_current_total_time(&mut self, current_total_time: f64) {
-        self.current_total_time = current_total_time;
-    }
 }
