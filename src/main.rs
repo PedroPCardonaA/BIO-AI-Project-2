@@ -300,8 +300,9 @@ fn edge_crossover(parent1: &Vec<Vec<usize>>, parent2: &Vec<Vec<usize>>) -> Vec<V
 fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
     let mut total_travel_time = 0.0;
     let mut total_penalty = 0.0;
-    let penalty_factor = 4.0; // Higher value means higher penalty
+    let penalty_factor = 1.0; // Higher value means higher penalty
     let penalty_factor_time = 10.0; // Higher value means higher penalty
+    let penalty_factor_violation = 100.0; // Higher value means higher penalty
 
     // Calculate the total travel time for each nurse
     let mut nurses = instance.nurses.clone();
@@ -333,7 +334,7 @@ fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
 
             // Check if the nurse visits the patient too late
             if patient.end_time < nurse.get_current_travel_time() {
-                total_penalty += penalty_factor_time * 2000.0;
+                total_penalty += penalty_factor_violation * (nurse.get_current_travel_time() - patient.end_time);
             }
 
             // Add the patient's demand to the nurse's current load
@@ -349,7 +350,7 @@ fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
 
         // Check if the nurses capacity is exceeded
         if nurse.get_current_load() as f64 > nurse.get_capacity() as f64 {
-            total_penalty += penalty_factor * (nurse.get_current_load() as f64 - nurse.get_capacity() as f64);
+            total_penalty += penalty_factor_violation * (nurse.get_current_load() as f64 - nurse.get_capacity() as f64);
         }
 
         // Check if the nurse returns to the depot too late
@@ -363,79 +364,6 @@ fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
 
     total_travel_time + total_penalty
 }
-
-
-fn fitness_a(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
-    // Penalty factor for all constraint violations.
-    let penalty_factor = 2.0;
-    let mut total_travel_time = 0.0; // The objective value: travel time only.
-    let mut total_penalty = 0.0;
-    
-    // Clone the nurses from the instance.
-    let mut nurses = instance.nurses.clone();
-    
-    // Process each nurse’s route.
-    for (nurse, route) in nurses.iter_mut().zip(solution.iter()) {
-        // We use local variables for this route.
-        let mut route_travel_time = 0.0;   // Sum of travel times (objective)
-        let mut route_duration = 0.0;      // Travel + waiting + care time (for checking time windows)
-        let mut total_demand = 0.0;        // Total demand in the route
-        
-        // The route always starts at the depot (index 0) at time 0.
-        let mut last_node = 0;
-        
-        for patient_id in route {
-            // Get the patient (using the string key as in your instance)
-            let patient = &instance.patients[&patient_id.to_string()];
-            // Get travel time from last node to the current patient.
-            let travel_time = instance.travel_times[last_node][*patient_id];
-            
-            // Update objective: add travel time for this segment.
-            route_travel_time += travel_time;
-            // Update route duration (this time always increases by the travel time).
-            route_duration += travel_time;
-            
-            // If we arrive before the patient’s time window opens, wait until the start.
-            if route_duration < patient.start_time {
-                // (Waiting time is not part of the travel-time objective.)
-                route_duration = patient.start_time;
-            }
-            // If we arrive after the patient’s end time, add a penalty proportional to the lateness.
-            if route_duration > patient.end_time {
-                total_penalty += penalty_factor * (route_duration - patient.end_time);
-            }
-            
-            // After starting the care, add the care time.
-            route_duration += patient.care_time;
-            // Accumulate the patient’s demand.
-            total_demand += patient.demand;
-            
-            // Set the current patient as the new last node.
-            last_node = *patient_id;
-        }
-        
-        // After the last patient, add the travel time returning to the depot.
-        let travel_time_to_depot = instance.travel_times[last_node][0];
-        route_travel_time += travel_time_to_depot;
-        route_duration += travel_time_to_depot;
-        
-        // Check the constraint for depot return time.
-        if route_duration > instance.depot.return_time {
-            total_penalty += penalty_factor * (route_duration - instance.depot.return_time);
-        }
-        // Check the capacity constraint.
-        if total_demand > nurse.get_capacity() as f64 {
-            total_penalty += penalty_factor * (total_demand - nurse.get_capacity() as f64);
-        }
-        
-        // Add this nurse’s travel time (the objective part) to the global total.
-        total_travel_time += route_travel_time;
-    }
-    
-    // The overall fitness is the travel time plus any penalties from constraint violations.
-    total_travel_time + total_penalty
-}
-
 
 /// Selects one individual from the population using tournament selection.
 ///
