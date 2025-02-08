@@ -7,7 +7,7 @@ mod utils;
 
 fn main() {
     let instance = utils::parse_data::parse_data("src/data/train/train_0.json");
-    let population = generate_population_heuristic(10, &instance);
+    let population = generate_population_heuristic_with_workload(10, &instance);
     let parent_1: &Vec<Vec<usize>> = &population[0];
 
     // Calculate the fitness of the first solution
@@ -111,6 +111,105 @@ fn generate_population_heuristic(population_size: usize, instance: &Instance) ->
     
     population
 }
+
+fn generate_population_heuristic_with_workload(
+    population_size: usize,
+    instance: &Instance,
+) -> Vec<Vec<Vec<usize>>> {
+    let mut population = Vec::with_capacity(population_size);
+    let patient_count = instance.patients.len();
+    let nurse_count = instance.nurses.len();
+    let mut rng = rand::thread_rng();
+
+    for _ in 0..population_size {
+        // Create a shuffled list of patient IDs (assumed to be 1-based).
+        let mut patient_ids: Vec<usize> = (1..=patient_count).collect();
+        patient_ids.shuffle(&mut rng);
+
+        // Clone the nurse list to track each nurse's current load.
+        let mut nurses = instance.nurses.clone();
+        // Each solution is represented as a vector of routes (each route is a Vec of patient IDs).
+        let mut solution = vec![Vec::new(); nurse_count];
+
+        // First, assign one patient to each nurse (if available and if capacity allows).
+        for i in 0..nurse_count {
+            if let Some(patient) = patient_ids.pop() {
+                {
+                    let current_load = nurses[i].get_current_load();
+                    let capacity = nurses[i].get_capacity();
+                    if current_load < capacity {
+                        solution[i].push(patient);
+                        let new_load = current_load + 1;
+                        nurses[i].set_current_load(new_load);
+                    }
+                }
+            }
+        }
+
+        // For each remaining patient, choose the nurse that minimizes the balanced increase.
+        while let Some(patient) = patient_ids.pop() {
+            let mut best_nurse_index = None;
+            let mut best_balanced_increase = f64::MAX;
+
+            // Consider only nurses with available capacity.
+            for (i, route) in solution.iter().enumerate() {
+                let current_load = nurses[i].get_current_load();
+                let capacity = nurses[i].get_capacity();
+                if current_load >= capacity {
+                    continue;
+                }
+
+                // Compute the extra travel time cost of appending the patient.
+                let increase = if route.is_empty() {
+                    // For an empty route, cost = depot -> patient + patient -> depot.
+                    instance.travel_times[0][patient] + instance.travel_times[patient][0]
+                } else {
+                    // For a non-empty route, cost = (last patient -> new patient + new patient -> depot)
+                    // minus (last patient -> depot) already accounted for.
+                    let last_patient = *route.last().unwrap();
+                    instance.travel_times[last_patient][patient]
+                        + instance.travel_times[patient][0]
+                        - instance.travel_times[last_patient][0]
+                };
+
+                // Instead of a fixed penalty, add the current load as a cost.
+                let balanced_increase = increase + (current_load as f64);
+
+                if balanced_increase < best_balanced_increase {
+                    best_balanced_increase = balanced_increase;
+                    best_nurse_index = Some(i);
+                }
+            }
+
+            if let Some(i) = best_nurse_index {
+                // Assign the patient to the chosen nurse.
+                solution[i].push(patient);
+                let new_load = nurses[i].get_current_load() + 1;
+                nurses[i].set_current_load(new_load);
+            } else {
+                // If no nurse has available capacity (all reached capacity),
+                // assign the patient to the nurse with the smallest overload.
+                let mut min_overload_index = 0;
+                let mut min_overload = f64::MAX;
+                for (i, nurse) in nurses.iter().enumerate() {
+                    let overload = nurse.get_current_load() as f64 - nurse.get_capacity() as f64;
+                    if overload < min_overload {
+                        min_overload = overload;
+                        min_overload_index = i;
+                    }
+                }
+                solution[min_overload_index].push(patient);
+                let new_load = nurses[min_overload_index].get_current_load() + 1;
+                nurses[min_overload_index].set_current_load(new_load);
+            }
+        }
+
+        population.push(solution);
+    }
+
+    population
+}
+
 
 fn edge_crossover(parent1: &Vec<Vec<usize>>, parent2: &Vec<Vec<usize>>) -> Vec<Vec<usize>> {
     let mut rng = rand::rng();
@@ -244,6 +343,190 @@ fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
     }
 
     total_travel_time + total_penalty
+}
+
+pub fn tournament_selection(
+    population: &Vec<Vec<Vec<usize>>>,
+    fitness: &Vec<f64>,
+    tournament_size: usize,
+) -> Vec<Vec<usize>> {
+    let mut rng = rand::rng();
+    let pop_size = population.len();
+
+    // Randomly select indices for the tournament.
+    let mut best_index = None;
+    for _ in 0..tournament_size {
+        let idx = rng.random_range(0..pop_size);
+        best_index = match best_index {
+            Some(current_best) => {
+                // Since lower fitness is better, choose the individual with the smallest fitness.
+                if fitness[idx] < fitness[current_best] {
+                    Some(idx)
+                } else {
+                    Some(current_best)
+                }
+            }
+            None => Some(idx),
+        }
+    }
+
+    // Return the best individual from the tournament.
+    population[best_index.unwrap()].clone()
+}
+
+pub fn exponential_rank_wheel_selection(
+    population: &Vec<Vec<Vec<usize>>>,
+    fitness: &Vec<f64>,
+    lambda: f64,
+) -> Vec<Vec<usize>> {
+    // Create a vector of indices for the population.
+    let mut indices: Vec<usize> = (0..population.len()).collect();
+    // Sort indices by fitness in ascending order (best first).
+    indices.sort_by(|&a, &b| fitness[a].partial_cmp(&fitness[b]).unwrap());
+
+    // Compute exponential weights based on rank (best individual has rank 0).
+    // Weight formula: weight = exp(-lambda * rank)
+    let weights: Vec<f64> = indices
+        .iter()
+        .enumerate()
+        .map(|(rank, _)| (-lambda * (rank as f64)).exp())
+        .collect();
+
+    // Calculate the total weight.
+    let total_weight: f64 = weights.iter().sum();
+
+    // Build cumulative weights for the roulette wheel.
+    let mut cumulative_weights = Vec::with_capacity(weights.len());
+    let mut cumulative = 0.0;
+    for w in &weights {
+        cumulative += *w;
+        cumulative_weights.push(cumulative);
+    }
+
+    // Generate a random number in the range [0, total_weight).
+    let mut rng = rand::rng();
+    let r: f64 = rng.random_range(0.0..total_weight);
+
+    // Find the first index where the cumulative weight exceeds the random number.
+    let selected_rank = cumulative_weights
+        .iter()
+        .position(|&cw| cw >= r)
+        .unwrap();
+    let selected_index = indices[selected_rank];
+
+    // Return the selected individual (cloned).
+    population[selected_index].clone()
+}
+
+
+fn route_preserving_crossover(
+    parent1: &Vec<Vec<usize>>, 
+    parent2: &Vec<Vec<usize>>, 
+    instance: &Instance
+) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
+    let mut rng = rand::rng();
+    let nurse_count = parent1.len();
+    let patient_count = instance.patients.len();
+
+    // Initialize children
+    let mut child1 = vec![Vec::new(); nurse_count];
+    let mut child2 = vec![Vec::new(); nurse_count];
+    let mut used_patients: HashSet<usize> = HashSet::new();
+    let mut assigned_nurses: HashSet<usize> = HashSet::new(); // Track assigned nurses
+
+    // Step 1: Identify common routes (including different nurse indices)
+    let mut route_map = HashMap::new();
+
+    // Store routes in a map to find identical ones
+    for nurse in 0..nurse_count {
+        route_map.insert(parent1[nurse].clone(), nurse); // Store route -> nurse index
+    }
+
+    for nurse2 in 0..nurse_count {
+        if let Some(&nurse1) = route_map.get(&parent2[nurse2]) {
+            if !assigned_nurses.contains(&nurse1) && !assigned_nurses.contains(&nurse2) {
+                // Copy the identical route to child1 and child2 at either index
+                child1[nurse1] = parent1[nurse1].clone();
+                child2[nurse1] = parent2[nurse2].clone();
+                used_patients.extend(&child1[nurse1]);
+                assigned_nurses.insert(nurse1);
+                assigned_nurses.insert(nurse2);
+            }
+        }
+    }
+
+    // Step 2: Collect remaining unassigned patients
+    let mut remaining_patients: Vec<usize> = (1..=patient_count)
+        .filter(|p| !used_patients.contains(p))
+        .collect();
+    remaining_patients.shuffle(&mut rng);
+
+    // Step 3: Assign remaining patients using an insertion heuristic
+    for patient in remaining_patients {
+        let mut best_nurse = 0;
+        let mut best_increase = f64::MAX;
+
+        for nurse in 0..nurse_count {
+            let route = &child1[nurse];
+            let last_patient = route.last().copied().unwrap_or(0); // 0 = depot
+            let increase = instance.travel_times[last_patient][patient] 
+                         + instance.travel_times[patient][0]; // Cost of adding patient
+
+            if increase < best_increase {
+                best_increase = increase;
+                best_nurse = nurse;
+            }
+        }
+        child1[best_nurse].push(patient);
+        child2[best_nurse].push(patient);
+    }
+
+    // Step 4: Ensure nurse capacities are respected
+    for nurse in 0..nurse_count {
+        let mut total_demand: f64 = child1[nurse]
+            .iter()
+            .map(|p| instance.patients[&p.to_string()].demand) 
+            .sum();
+
+        while total_demand > instance.nurses[0].get_capacity() as f64 {
+            if let Some(moved_patient) = child1[nurse].pop() {
+                let new_nurse = rng.random_range(0..nurse_count);
+                child1[new_nurse].push(moved_patient);
+                child2[new_nurse].push(moved_patient);
+
+                // Update total demand
+                total_demand = child1[nurse]
+                    .iter()
+                    .map(|p| instance.patients[&p.to_string()].demand)
+                    .sum();
+            } else {
+                break; // Prevent infinite loop if no more patients to move
+            }
+        }
+    }
+
+    (child1, child2)
+}
+
+pub fn mutate_relocate_patient(
+    individual: &mut Vec<Vec<usize>>,
+    mutation_probability: f64,
+) {
+    let mut rng = rand::rng();
+    let num_nurses = individual.len();
+    if num_nurses < 2 {
+        return;
+    }
+    for i in 0..num_nurses {
+        if !individual[i].is_empty() && rng.random::<f64>() < mutation_probability {
+            let patient_index = rng.random_range(0..individual[i].len());
+            let patient = individual[i].remove(patient_index);
+            let other_nurses: Vec<usize> = (0..num_nurses).filter(|&j| j != i).collect();
+            let target_nurse = *other_nurses.choose(&mut rng).unwrap();
+            let insertion_index = rng.random_range(0..=individual[target_nurse].len());
+            individual[target_nurse].insert(insertion_index, patient);
+        }
+    }
 }
 
 use plotters::{coord::types::RangedCoordf64, prelude::*};
