@@ -279,9 +279,6 @@ fn edge_crossover(parent1: &Vec<Vec<usize>>, parent2: &Vec<Vec<usize>>) -> Vec<V
     new_solution
 }
 
-use rand::{Rng, thread_rng};
-use std::collections::{HashSet, HashMap};
-
 fn route_preserving_crossover(
     parent1: &Vec<Vec<usize>>, 
     parent2: &Vec<Vec<usize>>, 
