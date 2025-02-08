@@ -9,11 +9,13 @@ fn main() {
     let instance = utils::parse_data::parse_data("src/data/train/train_0.json");
     let population = generate_population_heuristic(10, &instance);
     let parent_1: &Vec<Vec<usize>> = &population[0];
-    // Print the first solution
-    println!("{:?}", parent_1);
-    // Save the first solution to a file
+
+    // Calculate the fitness of the first solution
+    let fitness_value = fitness(parent_1, &instance);
+    println!("Fitness value: {:?}", fitness_value);
+
     utils::create_file::save_solution_to_file(parent_1, "parent_1.json").expect("Failed to save parent_1 to file");
-    //plot_map(parent_1, &instance.patients, &instance.depot);
+    plot_map(parent_1, &instance.patients, &instance.depot);
 }
 
 // Not used, better to use the heuristic approach
@@ -178,6 +180,70 @@ fn edge_crossover(parent1: &Vec<Vec<usize>>, parent2: &Vec<Vec<usize>>) -> Vec<V
     }
 
     new_solution
+}
+
+/*  
+    Fitness function
+    A lower fitness value is better, so we can use the total travel time as the fitness value.
+    Penalize solutions that exceed the maximum number of patients per nurse
+    Should also penalize solutions where a nurse's capacity is exceeded
+    If a patient is visited outside of their time window, penalize the solution
+*/
+fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
+    let mut total_travel_time = 0.0;
+    let mut total_penalty = 0.0;
+    let penalty_factor = 100.0; // Higher value means higher penalty
+
+    // Calculate the total travel time for each nurse
+    let mut nurses = instance.nurses.clone();
+    for (nurse, route) in nurses.iter_mut().zip(solution.iter()) {
+        let mut last_patient = 0; // The depot is the first patient
+
+        //println!("New nurse");
+
+        // Calculate the travel time and capacity for each patient in the route
+        for patient_id in route {
+            let patient = &instance.patients[&patient_id.to_string()];
+            // Print the nurse and patient ID
+            //println!("Last patient: {:?}, Current patient: {:?}", last_patient, patient_id);
+
+            // Calculate the travel time from the last patient to the current patient
+            let travel_time = instance.travel_times[last_patient][*patient_id];
+
+            // Check if the nurse visits the patient too early
+            if patient.start_time > nurse.get_current_total_time() + travel_time {
+                total_penalty += penalty_factor * (patient.start_time - nurse.get_current_total_time() - travel_time);
+            }
+
+            // Add the travel time to the nurse's current travel time
+            nurse.set_current_travel_time(nurse.get_current_travel_time() + travel_time + patient.care_time);
+
+            // Check if the nurse visits the patient too late
+            if patient.end_time < nurse.get_current_total_time() {
+                total_penalty += penalty_factor * (nurse.get_current_total_time() - patient.end_time);
+            }
+
+            // Add the patient's demand to the nurse's current load
+            nurse.set_current_load(nurse.get_current_load() + patient.demand as u32);
+
+            // Set the current patient as the last patient
+            last_patient = *patient_id;
+        }
+
+        // Add the travel time from the last patient to the depot
+        let travel_time = instance.travel_times[last_patient][0];
+        nurse.set_current_travel_time(nurse.get_current_travel_time() + travel_time);
+
+        // Check if the nurses capacity is exceeded
+        if nurse.get_current_load() as f64 > nurse.get_capacity() as f64 {
+            total_penalty += penalty_factor * (nurse.get_current_load() as f64 - nurse.get_capacity() as f64);
+        }
+
+        // Add the nurse's travel time to the total travel time
+        total_travel_time += nurse.get_current_travel_time();
+    }
+
+    total_travel_time + total_penalty
 }
 
 use plotters::{coord::types::RangedCoordf64, prelude::*};
