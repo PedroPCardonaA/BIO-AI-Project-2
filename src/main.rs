@@ -8,11 +8,15 @@ mod utils;
 fn main() {
     let instance = utils::parse_data::parse_data("src/data/train/train_0.json");
     let population = generate_population_heuristic(10, &instance);
-    let parent_1 = &population[0];
-    plot_map(parent_1, &instance.patients, &instance.depot);
+    let parent_1: &Vec<Vec<usize>> = &population[0];
+    // Print the first solution
+    println!("{:?}", parent_1);
+    // Save the first solution to a file
+    utils::create_file::save_solution_to_file(parent_1, "parent_1.json").expect("Failed to save parent_1 to file");
+    //plot_map(parent_1, &instance.patients, &instance.depot);
 }
 
-
+// Not used, better to use the heuristic approach
 fn generate_population(population_size: usize, instance: &Instance) -> Vec<Vec<Vec<usize>>> {
     let mut population = Vec::new();
     let patient_count = instance.patients.len();
