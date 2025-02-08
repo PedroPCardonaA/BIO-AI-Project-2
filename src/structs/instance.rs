@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::{depot::Depot, nurse::Nurse, patient::Patient};
 use serde::{Serialize, Deserialize};
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Instance {
     pub instance_name: String,         // The name of the instance.
     pub nbr_nurses: u32,               // The number of nurses available.
