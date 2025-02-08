@@ -1,0 +1,10 @@
+[package]
+name = "project_2"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+plotters = "0.3.7"
+rand = "0.9.0"
+serde = {version ="1.0.217", features = ["derive"]}
+serde_json = "1.0.138"
