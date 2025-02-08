@@ -7,15 +7,18 @@ mod utils;
 
 fn main() {
     let instance = utils::parse_data::parse_data("src/data/train/train_0.json");
-    let population = generate_population_heuristic_with_workload(10, &instance);
-    let parent_1: &Vec<Vec<usize>> = &population[0];
+    
+    let best_solution = evolutionary_algorithm(
+        &instance,
+        100,
+        10000,
+        5,
+        0.1,
+        0.1,
+    );
 
-    // Calculate the fitness of the first solution
-    let fitness_value = fitness(parent_1, &instance);
-    println!("Fitness value: {:?}", fitness_value);
-
-    utils::create_file::save_solution_to_file(parent_1, "parent_1.json").expect("Failed to save parent_1 to file");
-    plot_map(parent_1, &instance.patients, &instance.depot);
+    plot_map(&best_solution, &instance.patients, &instance.depot);
+    let _ = utils::create_file::save_solution_to_file(&best_solution, "solution.json");
 }
 
 // Not used, better to use the heuristic approach
@@ -345,6 +348,19 @@ fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
     total_travel_time + total_penalty
 }
 
+
+/// Selects one individual from the population using tournament selection.
+///
+/// # Arguments
+///
+/// * `population` - A reference to the population (each individual is a Vec<Vec<usize>>).
+/// * `fitness` - A reference to a vector of fitness values corresponding to each individual.
+///               Lower fitness is considered better.
+/// * `tournament_size` - The number of individuals in each tournament.
+///
+/// # Returns
+///
+/// A clone of the selected individual.
 pub fn tournament_selection(
     population: &Vec<Vec<Vec<usize>>>,
     fitness: &Vec<f64>,
@@ -359,7 +375,7 @@ pub fn tournament_selection(
         let idx = rng.random_range(0..pop_size);
         best_index = match best_index {
             Some(current_best) => {
-                // Since lower fitness is better, choose the individual with the smallest fitness.
+                // Lower fitness is better.
                 if fitness[idx] < fitness[current_best] {
                     Some(idx)
                 } else {
@@ -367,32 +383,32 @@ pub fn tournament_selection(
                 }
             }
             None => Some(idx),
-        }
+        };
     }
 
     // Return the best individual from the tournament.
     population[best_index.unwrap()].clone()
 }
 
+
 pub fn exponential_rank_wheel_selection(
     population: &Vec<Vec<Vec<usize>>>,
     fitness: &Vec<f64>,
     lambda: f64,
 ) -> Vec<Vec<usize>> {
-    // Create a vector of indices for the population.
+    // Create a vector of indices and sort them by fitness (ascending).
     let mut indices: Vec<usize> = (0..population.len()).collect();
-    // Sort indices by fitness in ascending order (best first).
     indices.sort_by(|&a, &b| fitness[a].partial_cmp(&fitness[b]).unwrap());
 
     // Compute exponential weights based on rank (best individual has rank 0).
-    // Weight formula: weight = exp(-lambda * rank)
+    // weight = exp(-lambda * rank)
     let weights: Vec<f64> = indices
         .iter()
         .enumerate()
         .map(|(rank, _)| (-lambda * (rank as f64)).exp())
         .collect();
 
-    // Calculate the total weight.
+    // Calculate total weight.
     let total_weight: f64 = weights.iter().sum();
 
     // Build cumulative weights for the roulette wheel.
@@ -403,20 +419,21 @@ pub fn exponential_rank_wheel_selection(
         cumulative_weights.push(cumulative);
     }
 
-    // Generate a random number in the range [0, total_weight).
+    // Generate a random number in [0, total_weight).
     let mut rng = rand::rng();
     let r: f64 = rng.random_range(0.0..total_weight);
 
-    // Find the first index where the cumulative weight exceeds the random number.
+    // Find the first rank where the cumulative weight exceeds r.
     let selected_rank = cumulative_weights
         .iter()
         .position(|&cw| cw >= r)
         .unwrap();
     let selected_index = indices[selected_rank];
 
-    // Return the selected individual (cloned).
+    // Return the selected individual.
     population[selected_index].clone()
 }
+
 
 
 fn route_preserving_crossover(
@@ -527,6 +544,81 @@ pub fn mutate_relocate_patient(
             individual[target_nurse].insert(insertion_index, patient);
         }
     }
+}
+
+pub fn evolutionary_algorithm(
+    instance: &Instance,
+    population_size: usize,
+    generations: usize,
+    tournament_size: usize,
+    mutation_probability: f64,
+    lambda: f64,
+) -> Vec<Vec<usize>> {
+    // 1. Generate the initial population.
+    let mut population = generate_population_heuristic_with_workload(population_size, instance);
+    // Evaluate fitness for the initial population.
+    let mut fitness_values: Vec<f64> = population
+        .iter()
+        .map(|individual| fitness(individual, instance))
+        .collect();
+
+    // Main loop: run for a fixed number of generations.
+    for gen in 0..generations {
+        let mut new_population = Vec::with_capacity(population_size);
+
+        // Elitism: carry over the best individual to the next generation.
+        let best_index = fitness_values
+            .iter()
+            .enumerate()
+            .min_by(|(_, &fit_a), (_, &fit_b)| fit_a.partial_cmp(&fit_b).unwrap())
+            .unwrap()
+            .0;
+        new_population.push(population[best_index].clone());
+
+        // Generate new individuals until we fill the population.
+        while new_population.len() < population_size {
+            // Selection: choose two parents using tournament selection.
+            let parent1 = tournament_selection(&population, &fitness_values, tournament_size);
+            let parent2 = tournament_selection(&population, &fitness_values, tournament_size);
+
+            // Crossover: perform a route-preserving crossover.
+            let (mut child1, mut child2) = route_preserving_crossover(&parent1, &parent2, instance);
+
+            // Mutation: apply mutation operator (relocate a patient) to each child.
+            mutate_relocate_patient(&mut child1, mutation_probability);
+            mutate_relocate_patient(&mut child2, mutation_probability);
+
+            new_population.push(child1);
+            if new_population.len() < population_size {
+                new_population.push(child2);
+            }
+        }
+
+        // Replace the old population with the new one and re-calculate fitness.
+        population = new_population;
+        fitness_values = population
+            .iter()
+            .map(|individual| fitness(individual, instance))
+            .collect();
+
+        // Print best fitness for this generation.
+        let best_fit = fitness_values
+            .iter()
+            .cloned()
+            .fold(f64::INFINITY, f64::min);
+        if (gen + 1) % 100 == 0 {
+            println!("Generation {}: Best fitness = {}", gen, best_fit);
+        }
+    }
+
+    // Return the best solution from the final population.
+    let best_index = fitness_values
+        .iter()
+        .enumerate()
+        .min_by(|(_, &fit_a), (_, &fit_b)| fit_a.partial_cmp(&fit_b).unwrap())
+        .unwrap()
+        .0;
+    population[best_index].clone()
 }
 
 use plotters::{coord::types::RangedCoordf64, prelude::*};
