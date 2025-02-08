@@ -1,6 +1,6 @@
 use rand::{seq::{IndexedRandom, IteratorRandom, SliceRandom}, Rng};
 use structs::{depot::Depot, instance::Instance, patient::Patient};
-use std::collections::{HashMap, HashSet};
+use std::{cmp::Ordering, collections::{HashMap, HashSet}, sync::{Arc, Mutex, RwLock}, thread};
 use std::time::Instant;
 
 mod structs;
@@ -10,16 +10,16 @@ fn main() {
     let instance = utils::parse_data::parse_data("src/data/train/train_0.json");
     
     let start_time = Instant::now();
-
     let best_solution = evolutionary_algorithm(
-        &instance,
-        100,
-        1000,
-        5,
-        0.4,
-        1.2,
-        10
-    );
+            &instance,
+            100,
+            1000,
+            5,
+            0.7,
+            1.2,
+            1000,
+            20
+        );
 
     // Calculates the elapsed time since the timer started.
     let duration = start_time.elapsed();
@@ -135,7 +135,7 @@ fn generate_population_heuristic_with_workload(
     let mut population = Vec::with_capacity(population_size);
     let patient_count = instance.patients.len();
     let nurse_count = instance.nurses.len();
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     for _ in 0..population_size {
         // Create a shuffled list of patient IDs (assumed to be 1-based).
@@ -297,13 +297,6 @@ fn edge_crossover(parent1: &Vec<Vec<usize>>, parent2: &Vec<Vec<usize>>) -> Vec<V
     new_solution
 }
 
-/*  
-    Fitness function
-    A lower fitness value is better, so we can use the total travel time as the fitness value.
-    Penalize solutions that exceed the maximum number of patients per nurse
-    Should also penalize solutions where a nurse's capacity is exceeded
-    If a patient is visited outside of their time window, penalize the solution
-*/
 fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
     let mut total_travel_time = 0.0;
     let mut total_penalty = 0.0;
@@ -340,7 +333,6 @@ fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
 
             // Check if the nurse visits the patient too late
             if patient.end_time < nurse.get_current_travel_time() {
-                //total_penalty += penalty_factor * (nurse.get_current_travel_time() - patient.end_time);
                 total_penalty += penalty_factor_time * 2000.0;
             }
 
@@ -369,6 +361,78 @@ fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
         total_travel_time += nurse.get_current_travel_time();
     }
 
+    total_travel_time + total_penalty
+}
+
+
+fn fitness_a(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
+    // Penalty factor for all constraint violations.
+    let penalty_factor = 2.0;
+    let mut total_travel_time = 0.0; // The objective value: travel time only.
+    let mut total_penalty = 0.0;
+    
+    // Clone the nurses from the instance.
+    let mut nurses = instance.nurses.clone();
+    
+    // Process each nurse’s route.
+    for (nurse, route) in nurses.iter_mut().zip(solution.iter()) {
+        // We use local variables for this route.
+        let mut route_travel_time = 0.0;   // Sum of travel times (objective)
+        let mut route_duration = 0.0;      // Travel + waiting + care time (for checking time windows)
+        let mut total_demand = 0.0;        // Total demand in the route
+        
+        // The route always starts at the depot (index 0) at time 0.
+        let mut last_node = 0;
+        
+        for patient_id in route {
+            // Get the patient (using the string key as in your instance)
+            let patient = &instance.patients[&patient_id.to_string()];
+            // Get travel time from last node to the current patient.
+            let travel_time = instance.travel_times[last_node][*patient_id];
+            
+            // Update objective: add travel time for this segment.
+            route_travel_time += travel_time;
+            // Update route duration (this time always increases by the travel time).
+            route_duration += travel_time;
+            
+            // If we arrive before the patient’s time window opens, wait until the start.
+            if route_duration < patient.start_time {
+                // (Waiting time is not part of the travel-time objective.)
+                route_duration = patient.start_time;
+            }
+            // If we arrive after the patient’s end time, add a penalty proportional to the lateness.
+            if route_duration > patient.end_time {
+                total_penalty += penalty_factor * (route_duration - patient.end_time);
+            }
+            
+            // After starting the care, add the care time.
+            route_duration += patient.care_time;
+            // Accumulate the patient’s demand.
+            total_demand += patient.demand;
+            
+            // Set the current patient as the new last node.
+            last_node = *patient_id;
+        }
+        
+        // After the last patient, add the travel time returning to the depot.
+        let travel_time_to_depot = instance.travel_times[last_node][0];
+        route_travel_time += travel_time_to_depot;
+        route_duration += travel_time_to_depot;
+        
+        // Check the constraint for depot return time.
+        if route_duration > instance.depot.return_time {
+            total_penalty += penalty_factor * (route_duration - instance.depot.return_time);
+        }
+        // Check the capacity constraint.
+        if total_demand > nurse.get_capacity() as f64 {
+            total_penalty += penalty_factor * (total_demand - nurse.get_capacity() as f64);
+        }
+        
+        // Add this nurse’s travel time (the objective part) to the global total.
+        total_travel_time += route_travel_time;
+    }
+    
+    // The overall fitness is the travel time plus any penalties from constraint violations.
     total_travel_time + total_penalty
 }
 
@@ -595,73 +659,342 @@ pub fn evolutionary_algorithm(
     mutation_probability: f64,
     lambda: f64,
     generation_to_print: usize,
+    num_islands: usize,
 ) -> Vec<Vec<usize>> {
-    // 1. Generate the initial population.
-    let mut population = generate_population_heuristic_with_workload(population_size, instance);
-    // Evaluate fitness for the initial population.
-    let mut fitness_values: Vec<f64> = population
-        .iter()
-        .map(|individual| fitness(individual, instance))
-        .collect();
+    // Parameters for island model
+    let migration_interval = 50;
+    // Each island gets its own subpopulation.
+    let sub_population_size = population_size / num_islands;
 
-    // Main loop: run for a fixed number of generations.
-    for gen in 0..generations {
-        let mut new_population = Vec::with_capacity(population_size);
-        
+    // Wrap instance in an Arc so that it can be shared across threads.
+    // (This requires that Instance is Clone + Sync + Send.)
+    let instance_arc = Arc::new(instance.clone());
 
-        // Elitism: carry over the best individual to the next generation.
-        let best_index = fitness_values
-            .iter()
-            .enumerate()
-            .min_by(|(_, &fit_a), (_, &fit_b)| fit_a.partial_cmp(&fit_b).unwrap())
-            .unwrap()
-            .0;
-        new_population.push(population[best_index].clone());
+    // Shared fitness cache: maps a (stringified) solution to its fitness value.
+    let fitness_cache: Arc<RwLock<HashMap<String, f64>>> = Arc::new(RwLock::new(HashMap::new()));
+    // Shared migration pool (for islands to deposit their best individuals).
+    let migration_pool: Arc<Mutex<Vec<Vec<Vec<usize>>>>> = Arc::new(Mutex::new(Vec::new()));
 
-        // Generate new individuals until we fill the population.
-        while new_population.len() < population_size {
-            // Selection: choose two parents using tournament selection.
-            let parent1 = tournament_selection(&population, &fitness_values, tournament_size);
-            let parent2 = tournament_selection(&population, &fitness_values, tournament_size);
+    // Launch one thread per island.
+    let mut handles = Vec::new();
+    for island_id in 0..num_islands {
+        let instance = instance_arc.clone();
+        let fitness_cache = fitness_cache.clone();
+        let migration_pool = migration_pool.clone();
+        let handle = thread::spawn(move || {
+            // Generate an initial subpopulation for this island.
+            let mut sub_population =
+                generate_population_heuristic_with_workload(sub_population_size, &instance);
+            let mut fitness_values: Vec<f64> = sub_population
+                .iter()
+                .map(|individual| {
+                    // Create a unique key for the solution (here we use a debug string).
+                    let key = format!("{:?}", individual);
+                    {
+                        let cache_read = fitness_cache.read().unwrap();
+                        if let Some(&cached_fit) = cache_read.get(&key) {
+                            return cached_fit;
+                        }
+                    }
+                    let fit = fitness(individual, &instance);
+                    let mut cache_write = fitness_cache.write().unwrap();
+                    cache_write.insert(key, fit);
+                    fit
+                })
+                .collect();
 
-            // Crossover: perform a route-preserving crossover.
-            let (mut child1, mut child2) = route_preserving_crossover(&parent1, &parent2, instance);
+            // Main loop for this island.
+            for gen in 0..generations {
+                // Every migration_interval generations, perform migration.
+                if gen % migration_interval == 0 && gen > 0 {
+                    // Deposit the best individual of this island in the shared migration pool.
+                    let best_index = fitness_values
+                        .iter()
+                        .enumerate()
+                        .min_by(|(_, &fit_a), (_, &fit_b)| {
+                            fit_a.partial_cmp(&fit_b).unwrap()
+                        })
+                        .unwrap()
+                        .0;
+                    let best_individual = sub_population[best_index].clone();
+                    {
+                        let mut pool = migration_pool.lock().unwrap();
+                        pool.push(best_individual);
+                    }
+                    // Then, if there is any migrant available, replace our worst individual.
+                    {
+                        let pool = migration_pool.lock().unwrap();
+                        if !pool.is_empty() {
+                            // Find the worst individual in the island.
+                            let worst_index = fitness_values
+                                .iter()
+                                .enumerate()
+                                .max_by(|(_, &fit_a), (_, &fit_b)| {
+                                    fit_a.partial_cmp(&fit_b).unwrap()
+                                })
+                                .unwrap()
+                                .0;
+                            // Choose a random migrant from the pool.
+                            let mut rng = rand::thread_rng();
+                            if let Some(migrant) = pool.choose(&mut rng) {
+                                sub_population[worst_index] = migrant.clone();
+                                // Recalculate fitness for the replaced solution using the cache.
+                                let key = format!("{:?}", sub_population[worst_index]);
+                                let new_fit = {
+                                    let cache_read = fitness_cache.read().unwrap();
+                                    if let Some(&cached_fit) = cache_read.get(&key) {
+                                        cached_fit
+                                    } else {
+                                        drop(cache_read);
+                                        let fit = fitness(&sub_population[worst_index], &instance);
+                                        let mut cache_write = fitness_cache.write().unwrap();
+                                        cache_write.insert(key, fit);
+                                        fit
+                                    }
+                                };
+                                fitness_values[worst_index] = new_fit;
+                            }
+                        }
+                    }
+                }
 
-            // Mutation: apply mutation operator (relocate a patient) to each child.
-            mutate_relocate_patient(&mut child1, mutation_probability);
-            mutate_relocate_patient(&mut child2, mutation_probability);
+                // Generate a new population for the island.
+                let mut new_population = Vec::with_capacity(sub_population_size);
+                // Elitism: carry over the best individual.
+                let best_index = fitness_values
+                    .iter()
+                    .enumerate()
+                    .min_by(|(_, &fit_a), (_, &fit_b)| {
+                        fit_a.partial_cmp(&fit_b).unwrap()
+                    })
+                    .unwrap()
+                    .0;
+                new_population.push(sub_population[best_index].clone());
 
-            new_population.push(child1);
-            if new_population.len() < population_size {
-                new_population.push(child2);
+                // Generate offspring until the subpopulation is filled.
+                while new_population.len() < sub_population_size {
+                    // Selection: tournament selection.
+                    let parent1 =
+                        tournament_selection(&sub_population, &fitness_values, tournament_size);
+                    let parent2 =
+                        tournament_selection(&sub_population, &fitness_values, tournament_size);
+                    // Crossover: route-preserving crossover.
+                    let (mut child1, mut child2) =
+                        route_preserving_crossover(&parent1, &parent2, &instance);
+                    // Mutation: relocate a patient.
+                    mutate_relocate_patient(&mut child1, mutation_probability);
+                    mutate_relocate_patient(&mut child2, mutation_probability);
+                    new_population.push(child1);
+                    if new_population.len() < sub_population_size {
+                        new_population.push(child2);
+                    }
+                }
+                sub_population = new_population;
+                // Recalculate fitness values for the new generation.
+                fitness_values = sub_population
+                    .iter()
+                    .map(|individual| {
+                        let key = format!("{:?}", individual);
+                        {
+                            let cache_read = fitness_cache.read().unwrap();
+                            if let Some(&cached_fit) = cache_read.get(&key) {
+                                return cached_fit;
+                            }
+                        }
+                        let fit = fitness(individual, &instance);
+                        let mut cache_write = fitness_cache.write().unwrap();
+                        cache_write.insert(key, fit);
+                        fit
+                    })
+                    .collect();
+
+                // Optionally print status.
+                if gen % generation_to_print == 0 {
+                    let best_fit = fitness_values
+                        .iter()
+                        .cloned()
+                        .fold(f64::INFINITY, f64::min);
+                    println!(
+                        "Island {} Generation {}: Best fitness = {}",
+                        island_id, gen, best_fit
+                    );
+                }
             }
+
+            // Return the best solution from this island.
+            let best_index = fitness_values
+                .iter()
+                .enumerate()
+                .min_by(|(_, &fit_a), (_, &fit_b)| fit_a.partial_cmp(&fit_b).unwrap())
+                .unwrap()
+                .0;
+            sub_population[best_index].clone()
+        });
+        handles.push(handle);
+    }
+
+    // Wait for all island threads to finish and select the overall best solution.
+    let mut best_solution = None;
+    let mut best_fitness = f64::INFINITY;
+    for handle in handles {
+        let solution = handle.join().unwrap();
+        let sol_fit = fitness(&solution, instance);
+        if sol_fit < best_fitness {
+            best_fitness = sol_fit;
+            best_solution = Some(solution);
         }
+    }
+    best_solution.unwrap()
+}
 
-        // Replace the old population with the new one and re-calculate fitness.
-        population = new_population;
-        fitness_values = population
-            .iter()
-            .map(|individual| fitness(individual, instance))
-            .collect();
 
-        // Print best fitness for this generation.
-        let best_fit = fitness_values
-            .iter()
-            .cloned()
-            .fold(f64::INFINITY, f64::min);
-        if (gen) % generation_to_print == 0 {
-            println!("Generation {}: Best fitness = {}", gen, best_fit);
+
+pub fn merge_and_split_crossover(
+    parent1: &Vec<Vec<usize>>,
+    parent2: &Vec<Vec<usize>>,
+    instance: &Instance,
+) -> Vec<Vec<usize>> {
+    // Flatten both parents into one-dimensional vectors.
+    let flat1: Vec<usize> = parent1.iter().flatten().cloned().collect();
+    let flat2: Vec<usize> = parent2.iter().flatten().cloned().collect();
+    let n_customers = flat1.len(); // Assuming customers are numbered 1..=n_customers
+
+    // Build maps for the position (rank) of each customer in both parents.
+    let mut pos1: HashMap<usize, usize> = HashMap::new();
+    for (i, &cust) in flat1.iter().enumerate() {
+        pos1.insert(cust, i);
+    }
+    let mut pos2: HashMap<usize, usize> = HashMap::new();
+    for (i, &cust) in flat2.iter().enumerate() {
+        pos2.insert(cust, i);
+    }
+
+    // Create a giant tour by sorting customers by the average of their positions in the two parents.
+    let mut customers: Vec<usize> = (1..=n_customers).collect();
+    customers.sort_by(|&a, &b| {
+        let rank_a = (pos1.get(&a).unwrap() + pos2.get(&a).unwrap()) as f64 / 2.0;
+        let rank_b = (pos1.get(&b).unwrap() + pos2.get(&b).unwrap()) as f64 / 2.0;
+        rank_a.partial_cmp(&rank_b).unwrap_or(Ordering::Equal)
+    });
+
+    // --- Split the giant tour into routes ---
+    // Here we use a simple greedy splitting based on capacity.
+    // (In practice, you might want to use a dynamic programming split that also considers time windows.)
+    let n_routes = instance.nurses.len();
+    let capacity = instance.nurses[0].get_capacity() as f64; // assuming all nurses have the same capacity
+    let mut routes: Vec<Vec<usize>> = Vec::new();
+    let mut current_route: Vec<usize> = Vec::new();
+    let mut current_load: f64 = 0.0;
+
+    for &cust in customers.iter() {
+        // Look up the demand for the customer.
+        let demand = instance
+            .patients
+            .get(&cust.to_string())
+            .map(|p| p.demand)
+            .unwrap_or(0.0);
+        // If adding the customer does not exceed capacity (or if the current route is empty),
+        // add the customer to the current route.
+        if current_route.is_empty() || current_load + demand <= capacity {
+            current_route.push(cust);
+            current_load += demand;
+        } else {
+            // Otherwise, finish the current route and start a new one.
+            routes.push(current_route);
+            current_route = vec![cust];
+            current_load = demand;
+        }
+    }
+    if !current_route.is_empty() {
+        routes.push(current_route);
+    }
+
+    // --- Adjust the number of routes to match the number of vehicles (nurses) ---
+    // If we have too few routes, add empty ones.
+    while routes.len() < n_routes {
+        routes.push(vec![]);
+    }
+    // If we have too many routes, merge some of them.
+    while routes.len() > n_routes {
+        // As a simple strategy, sort routes by total load and merge the two with the smallest loads.
+        routes.sort_by(|a, b| {
+            let load_a: f64 = a.iter().map(|&c| {
+                instance
+                    .patients
+                    .get(&c.to_string())
+                    .map(|p| p.demand)
+                    .unwrap_or(0.0)
+            }).sum();
+            let load_b: f64 = b.iter().map(|&c| {
+                instance
+                    .patients
+                    .get(&c.to_string())
+                    .map(|p| p.demand)
+                    .unwrap_or(0.0)
+            }).sum();
+            load_a.partial_cmp(&load_b).unwrap_or(Ordering::Equal)
+        });
+        // Merge the two smallest routes.
+        let route1 = routes.remove(0);
+        let route2 = routes.remove(0);
+        let merged = [route1, route2].concat();
+        routes.push(merged);
+    }
+
+    // Optionally, randomize the order of routes.
+    let mut rng = rand::rng();
+    routes.shuffle(&mut rng);
+    routes
+}
+
+
+pub fn swap_mutation(individual: &mut Vec<Vec<usize>>, mutation_rate: f64) {
+    let mut rng = rand::rng();
+    let mut positions = Vec::new();
+
+    if rng.random::<f64>() > mutation_rate {
+        return;
+    }
+
+    // Collect the positions of all patients across routes.
+    for (route_idx, route) in individual.iter().enumerate() {
+        for pos_idx in 0..route.len() {
+            positions.push((route_idx, pos_idx));
         }
     }
 
-    // Return the best solution from the final population.
-    let best_index = fitness_values
-        .iter()
-        .enumerate()
-        .min_by(|(_, &fit_a), (_, &fit_b)| fit_a.partial_cmp(&fit_b).unwrap())
-        .unwrap()
-        .0;
-    population[best_index].clone()
+    // Need at least two patients to swap.
+    if positions.len() < 2 {
+        return;
+    }
+
+    // Select two distinct random positions.
+    let idx1 = rng.random_range(0..positions.len());
+    let mut idx2 = rng.random_range(0..positions.len());
+    while idx2 == idx1 {
+        idx2 = rng.random_range(0..positions.len());
+    }
+
+    let (route1, pos1) = positions[idx1];
+    let (route2, pos2) = positions[idx2];
+
+    // Swap the two patients.
+    if route1 == route2 {
+        // If in the same route, use the built-in swap.
+        individual[route1].swap(pos1, pos2);
+    } else {
+        // If in different routes, swap using mem::swap.
+        if route1 == route2 {
+            individual[route1].swap(pos1, pos2);
+        } else {
+            let (left, right) = individual.split_at_mut(std::cmp::max(route1, route2));
+            if route1 < route2 {
+                std::mem::swap(&mut left[route1][pos1], &mut right[0][pos2]);
+            } else {
+                std::mem::swap(&mut right[0][pos1], &mut left[route2][pos2]);
+            }
+        }
+    }
 }
 
 use plotters::{coord::types::RangedCoordf64, prelude::*};
