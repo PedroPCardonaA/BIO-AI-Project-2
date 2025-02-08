@@ -279,6 +279,94 @@ fn edge_crossover(parent1: &Vec<Vec<usize>>, parent2: &Vec<Vec<usize>>) -> Vec<V
     new_solution
 }
 
+fn route_preserving_crossover(
+    parent1: &Vec<Vec<usize>>, 
+    parent2: &Vec<Vec<usize>>, 
+    instance: &Instance
+) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
+    let mut rng = rand::rng();
+    let nurse_count = parent1.len();
+    let patient_count = instance.patients.len();
+
+    // Initialize children
+    let mut child1 = vec![Vec::new(); nurse_count];
+    let mut child2 = vec![Vec::new(); nurse_count];
+    let mut used_patients: HashSet<usize> = HashSet::new();
+    let mut assigned_nurses: HashSet<usize> = HashSet::new(); // Track assigned nurses
+
+    // Step 1: Identify common routes (including different nurse indices)
+    let mut route_map = HashMap::new();
+
+    // Store routes in a map to find identical ones
+    for nurse in 0..nurse_count {
+        route_map.insert(parent1[nurse].clone(), nurse); // Store route -> nurse index
+    }
+
+    for nurse2 in 0..nurse_count {
+        if let Some(&nurse1) = route_map.get(&parent2[nurse2]) {
+            if !assigned_nurses.contains(&nurse1) && !assigned_nurses.contains(&nurse2) {
+                // Copy the identical route to child1 and child2 at either index
+                child1[nurse1] = parent1[nurse1].clone();
+                child2[nurse1] = parent2[nurse2].clone();
+                used_patients.extend(&child1[nurse1]);
+                assigned_nurses.insert(nurse1);
+                assigned_nurses.insert(nurse2);
+            }
+        }
+    }
+
+    // Step 2: Collect remaining unassigned patients
+    let mut remaining_patients: Vec<usize> = (1..=patient_count)
+        .filter(|p| !used_patients.contains(p))
+        .collect();
+    remaining_patients.shuffle(&mut rng);
+
+    // Step 3: Assign remaining patients using an insertion heuristic
+    for patient in remaining_patients {
+        let mut best_nurse = 0;
+        let mut best_increase = f64::MAX;
+
+        for nurse in 0..nurse_count {
+            let route = &child1[nurse];
+            let last_patient = route.last().copied().unwrap_or(0); // 0 = depot
+            let increase = instance.travel_times[last_patient][patient] 
+                         + instance.travel_times[patient][0]; // Cost of adding patient
+
+            if increase < best_increase {
+                best_increase = increase;
+                best_nurse = nurse;
+            }
+        }
+        child1[best_nurse].push(patient);
+        child2[best_nurse].push(patient);
+    }
+
+    // Step 4: Ensure nurse capacities are respected
+    for nurse in 0..nurse_count {
+        let mut total_demand: f64 = child1[nurse]
+            .iter()
+            .map(|p| instance.patients[&p.to_string()].demand) 
+            .sum();
+
+        while total_demand > instance.nurses[0].get_capacity() as f64 {
+            if let Some(moved_patient) = child1[nurse].pop() {
+                let new_nurse = rng.random_range(0..nurse_count);
+                child1[new_nurse].push(moved_patient);
+                child2[new_nurse].push(moved_patient);
+
+                // Update total demand
+                total_demand = child1[nurse]
+                    .iter()
+                    .map(|p| instance.patients[&p.to_string()].demand)
+                    .sum();
+            } else {
+                break; // Prevent infinite loop if no more patients to move
+            }
+        }
+    }
+
+    (child1, child2)
+}
 
 pub fn mutate_relocate_patient(
     individual: &mut Vec<Vec<usize>>,
