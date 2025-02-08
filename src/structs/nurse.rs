@@ -1,5 +1,5 @@
 use serde::{Serialize, Deserialize};
-#[derive(Debug,Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Nurse {
     capacity: u32,
     current_load: u32,
@@ -19,10 +19,6 @@ impl Nurse {
 
     pub fn get_capacity(&self) -> u32 {
         self.capacity
-    }
-
-    pub fn set_capacity(&mut self, capacity: u32) {
-        self.capacity = capacity;
     }
 
     pub fn get_current_load(&self) -> u32 {

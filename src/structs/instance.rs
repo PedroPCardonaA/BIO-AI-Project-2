@@ -10,7 +10,7 @@ pub struct Instance {
     pub benchmark: f64,                // The benchmark objective value for the instance.
     pub depot: Depot,                // Depot-related information.
     pub patients: HashMap<String, Patient>,       // List of patients.
-    pub travel_times: Vec<Vec<f64>>,   // The travel time matrix.
+    pub travel_times: Vec<Vec<f64>>,   // The travel time matrix. travel_times[i][j] is the travel time from patient i to patient j.
     #[serde(default)]
     pub nurses: Vec<Nurse>,            // List of nurses.
 }
