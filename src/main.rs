@@ -284,7 +284,7 @@ fn route_preserving_crossover(
     parent2: &Vec<Vec<usize>>, 
     instance: &Instance
 ) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
     let nurse_count = parent1.len();
     let patient_count = instance.patients.len();
 
@@ -350,7 +350,7 @@ fn route_preserving_crossover(
 
         while total_demand > instance.nurses[0].get_capacity() as f64 {
             if let Some(moved_patient) = child1[nurse].pop() {
-                let new_nurse = rng.gen_range(0..nurse_count);
+                let new_nurse = rng.random_range(0..nurse_count);
                 child1[new_nurse].push(moved_patient);
                 child2[new_nurse].push(moved_patient);
 
