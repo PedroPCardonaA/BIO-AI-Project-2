@@ -2,3 +2,4 @@ pub mod generate_population;
 pub mod crossover;
 pub mod mutation;
 pub mod selection;
+pub mod niching;
