@@ -1,9 +1,8 @@
 use rand::seq::{IndexedRandom, IteratorRandom};
 use structs::instance::Instance;
 use ea_components::{crossover::route_preserving_crossover, generate_population::generate_population_heuristic_with_workload, mutation::mutate_relocate_patient, niching::fitness_sharing_adjustment, selection::tournament_selection, fitness::fitness};
-use utils::plot_map::plot_map;
 use std::{collections::HashMap, sync::{Arc, Mutex, RwLock}, thread};
-use utils::plot_metrics::plot_fitness;
+use utils::{plot_metrics::plot_fitness, plot_map::plot_map, textual_answer::save_textual_solution_to_file};
 use std::time::Instant;
 
 mod structs;
@@ -36,6 +35,8 @@ fn main() {
     println!("Evolutionary algorithm training completed in: {:.4} seconds", secs);
 
     plot_map(&best_solution, &instance.patients, &instance.depot);
+    save_textual_solution_to_file("output/solution.txt", &best_solution, &instance);
+
     let _ = utils::create_file::save_solution_to_file(&best_solution, "output/solution.json");
 }
 
