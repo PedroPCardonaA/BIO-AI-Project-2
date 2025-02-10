@@ -11,18 +11,18 @@ mod utils;
 mod ea_components;
 
 fn main() {
-    let instance = utils::parse_data::parse_data("src/data/train/train_0.json");
+    let instance = utils::parse_data::parse_data("src/data/train/train_1.json");
     
     let start_time = Instant::now();
     let best_solution = evolutionary_algorithm_niching(
             &instance,
             200,
-            1000,
-            5,
-            0.7,
+            15000,
+            30,
+            0.2,
             1.2,
-            100,
-            20
+            500,
+            8
         );
 
     // Calculates the elapsed time since the timer started.
@@ -43,9 +43,9 @@ fn main() {
 fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
     let mut total_travel_time = 0.0;
     let mut total_penalty = 0.0;
-    let penalty_factor = 1.0; // Higher value means higher penalty
-    let penalty_factor_time = 10.0; // Higher value means higher penalty
-    let penalty_factor_violation = 100.0; // Higher value means higher penalty
+    let penalty_factor = 2.0; // Higher value means higher penalty
+    let penalty_factor_time = 20.0; // Higher value means higher penalty
+    let penalty_factor_violation = 50.0; // Higher value means higher penalty
 
     // Calculate the total travel time for each nurse
     let mut nurses = instance.nurses.clone();
