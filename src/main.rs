@@ -1,6 +1,6 @@
 use rand::seq::{IndexedRandom, IteratorRandom};
 use structs::instance::Instance;
-use ea_components::{crossover::route_preserving_crossover, generate_population::generate_population_heuristic_with_workload, mutation::mutate_relocate_patient, niching::fitness_sharing_adjustment, selection::tournament_selection};
+use ea_components::{crossover::route_preserving_crossover, generate_population::generate_population_heuristic_with_workload, mutation::mutate_relocate_patient, niching::fitness_sharing_adjustment, selection::tournament_selection, fitness::fitness};
 use std::{collections::HashMap, sync::{Arc, Mutex, RwLock}, thread};
 use utils::{plot_metrics::plot_fitness, plot_map::plot_map, textual_answer::save_textual_solution_to_file};
 use std::time::Instant;
@@ -16,13 +16,13 @@ fn main() {
     let best_solution = evolutionary_algorithm(
             &instance,
             200,
-            10,
-            30,
+            15000,
+            20,
             0.2,
             1.2,
-            500,
+            1000,
             8,
-            50,
+            2500,
         );
 
     // Calculates the elapsed time since the timer started.
@@ -38,76 +38,6 @@ fn main() {
     save_textual_solution_to_file("output/solution.txt", &best_solution, &instance);
 
     let _ = utils::create_file::save_solution_to_file(&best_solution, "output/solution.json");
-}
-
-
-
-fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
-    let mut total_travel_time = 0.0;
-    let mut total_penalty = 0.0;
-    let penalty_factor = 2.0; // Higher value means higher penalty
-    let penalty_factor_time = 20.0; // Higher value means higher penalty
-    let penalty_factor_violation = 50.0; // Higher value means higher penalty
-
-    // Calculate the total travel time for each nurse
-    let mut nurses = instance.nurses.clone();
-    for (nurse, route) in nurses.iter_mut().zip(solution.iter()) {
-        let mut last_patient = 0; // The depot is the first patient
-
-        //println!("New nurse");
-
-        // Calculate the travel time and capacity for each patient in the route
-        for patient_id in route {
-            let mut wait_time = 0.0;
-            let patient = &instance.patients[&patient_id.to_string()];
-            // Print the nurse and patient ID
-            //println!("Last patient: {:?}, Current patient: {:?}", last_patient, patient_id);
-
-            // Calculate the travel time from the last patient to the current patient
-            let travel_time = instance.travel_times[last_patient][*patient_id];
-
-            // Add the travel time as a penalty, since then nurses will be penalized for traveling too much between patients
-            total_penalty += travel_time * penalty_factor_time;
-
-            // Check if the nurse visits the patient too early
-            if patient.start_time > (nurse.get_current_travel_time() + travel_time) {
-                wait_time = patient.start_time - (nurse.get_current_travel_time() + travel_time);
-            }
-
-            // Add the travel time to the nurse's current travel time
-            nurse.set_current_travel_time(nurse.get_current_travel_time() + travel_time + patient.care_time + wait_time);
-
-            // Check if the nurse visits the patient too late
-            if patient.end_time < nurse.get_current_travel_time() {
-                total_penalty += penalty_factor_violation * (nurse.get_current_travel_time() - patient.end_time);
-            }
-
-            // Add the patient's demand to the nurse's current load
-            nurse.set_current_load(nurse.get_current_load() + patient.demand as u32);
-
-            // Set the current patient as the last patient
-            last_patient = *patient_id;
-        }
-
-        // Add the travel time from the last patient to the depot
-        let travel_time = instance.travel_times[last_patient][0];
-        nurse.set_current_travel_time(nurse.get_current_travel_time() + travel_time);
-
-        // Check if the nurses capacity is exceeded
-        if nurse.get_current_load() as f64 > nurse.get_capacity() as f64 {
-            total_penalty += penalty_factor_violation * (nurse.get_current_load() as f64 - nurse.get_capacity() as f64);
-        }
-
-        // Check if the nurse returns to the depot too late
-        if nurse.get_current_travel_time() > instance.depot.return_time {
-            total_penalty += penalty_factor * (nurse.get_current_travel_time() - instance.depot.return_time);
-        }
-
-        // Add the nurse's travel time to the total travel time
-        total_travel_time += nurse.get_current_travel_time();
-    }
-
-    total_travel_time + total_penalty
 }
 
 /// Structure to hold the result from an island.
