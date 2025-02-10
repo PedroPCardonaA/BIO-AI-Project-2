@@ -282,3 +282,163 @@ pub fn merge_and_split_crossover(
     routes
 }
 
+
+pub fn route_preserving_crossover_with_division(
+    parent1: &Vec<Vec<usize>>, 
+    parent2: &Vec<Vec<usize>>, 
+    instance: &Instance,
+    division_rate: f64
+) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
+    use rand::Rng; 
+    let mut rng = rand::rng();
+    let nurse_count = parent1.len();
+    let patient_count = instance.patients.len();
+
+    // Initialize children with empty routes for each nurse.
+    let mut child1 = vec![Vec::new(); nurse_count];
+    let mut child2 = vec![Vec::new(); nurse_count];
+    let mut used_patients: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    let mut assigned_nurses: std::collections::HashSet<usize> = std::collections::HashSet::new();
+
+    // Step 1: Identify common routes (including mirrored routes)
+    let mut route_map = std::collections::HashMap::new();
+    for nurse in 0..nurse_count {
+        route_map.insert(parent1[nurse].clone(), nurse);
+    }
+
+    for nurse2 in 0..nurse_count {
+        // Check for an exact match between parent2 and parent1.
+        if let Some(&nurse1) = route_map.get(&parent2[nurse2]) {
+            if !assigned_nurses.contains(&nurse1) && !assigned_nurses.contains(&nurse2) {
+                child1[nurse1] = parent1[nurse1].clone();
+                child2[nurse1] = parent2[nurse2].clone();
+                used_patients.extend(&child1[nurse1]);
+                assigned_nurses.insert(nurse1);
+                assigned_nurses.insert(nurse2);
+            }
+        } else {
+            // Check for a mirrored route: reverse parent2's route and compare.
+            let mut reversed_route = parent2[nurse2].clone();
+            reversed_route.reverse();
+            if let Some(&nurse1) = route_map.get(&reversed_route) {
+                if !assigned_nurses.contains(&nurse1) && !assigned_nurses.contains(&nurse2) {
+                    child1[nurse1] = parent1[nurse1].clone();
+                    child2[nurse1] = parent1[nurse1].clone();
+                    used_patients.extend(&child1[nurse1]);
+                    assigned_nurses.insert(nurse1);
+                    assigned_nurses.insert(nurse2);
+                }
+            }
+        }
+    }
+
+    // Step 2: Collect remaining unassigned patients.
+    let mut remaining_patients: Vec<usize> = (1..=patient_count)
+        .filter(|p| !used_patients.contains(p))
+        .collect();
+    remaining_patients.shuffle(&mut rng);
+
+    // Step 3: Assign remaining patients using an insertion heuristic.
+    for patient in remaining_patients {
+        let mut best_nurse = 0;
+        let mut best_increase = f64::MAX;
+
+        for nurse in 0..nurse_count {
+            let route = &child1[nurse];
+            let last_patient = route.last().copied().unwrap_or(0); // 0 represents the depot.
+            let increase = instance.travel_times[last_patient][patient] 
+                         + instance.travel_times[patient][0];
+            if increase < best_increase {
+                best_increase = increase;
+                best_nurse = nurse;
+            }
+        }
+        child1[best_nurse].push(patient);
+        child2[best_nurse].push(patient);
+    }
+
+    // Step 4: Ensure nurse capacities are respected.
+    for nurse in 0..nurse_count {
+        let mut total_demand: f64 = child1[nurse]
+            .iter()
+            .map(|p| instance.patients[&p.to_string()].demand)
+            .sum();
+
+        while total_demand > instance.nurses[0].get_capacity() as f64 {
+            if let Some(moved_patient) = child1[nurse].pop() {
+                let new_nurse = rng.random_range(0..nurse_count);
+                child1[new_nurse].push(moved_patient);
+                child2[new_nurse].push(moved_patient);
+
+                total_demand = child1[nurse]
+                    .iter()
+                    .map(|p| instance.patients[&p.to_string()].demand)
+                    .sum();
+            } else {
+                break; // Prevent infinite loop if no more patients can be moved.
+            }
+        }
+    }
+
+    // Helper closure to compute route cost (depot -> first patient, between patients, and back to depot).
+    let compute_route_cost = |route: &Vec<usize>| -> f64 {
+        if route.is_empty() {
+            0.0
+        } else {
+            let mut cost = instance.travel_times[0][route[0]];
+            for window in route.windows(2) {
+                cost += instance.travel_times[window[0]][window[1]];
+            }
+            cost + instance.travel_times[*route.last().unwrap()][0]
+        }
+    };
+
+    // Step 5: (Probabilistic) Divide the longest route at a random point,
+    // and assign one of the divided sub-routes to an unused nurse.
+    if rng.random::<f64>() < division_rate {
+        // Process child1.
+        if let Some(unused_nurse_idx) = child1.iter().position(|r| r.is_empty()) {
+            let mut longest_route_index: Option<usize> = None;
+            let mut longest_cost = 0.0;
+            for (i, route) in child1.iter().enumerate() {
+                if !route.is_empty() && i != unused_nurse_idx && route.len() >= 2 {
+                    let cost = compute_route_cost(route);
+                    if cost > longest_cost {
+                        longest_cost = cost;
+                        longest_route_index = Some(i);
+                    }
+                }
+            }
+            if let Some(route_idx) = longest_route_index {
+                let route = &mut child1[route_idx];
+                let split_point = rng.random_range(1..route.len()); // ensures both segments are non-empty
+                let new_route_segment = route.split_off(split_point);
+                child1[unused_nurse_idx] = new_route_segment;
+            }
+        }
+
+        // Process child2 similarly.
+        if let Some(unused_nurse_idx) = child2.iter().position(|r| r.is_empty()) {
+            let mut longest_route_index: Option<usize> = None;
+            let mut longest_cost = 0.0;
+            for (i, route) in child2.iter().enumerate() {
+                if !route.is_empty() && i != unused_nurse_idx && route.len() >= 2 {
+                    let cost = compute_route_cost(route);
+                    if cost > longest_cost {
+                        longest_cost = cost;
+                        longest_route_index = Some(i);
+                    }
+                }
+            }
+            if let Some(route_idx) = longest_route_index {
+                let route = &mut child2[route_idx];
+                let split_point = rng.random_range(1..route.len());
+                let new_route_segment = route.split_off(split_point);
+                child2[unused_nurse_idx] = new_route_segment;
+            }
+        }
+    }
+
+    (child1, child2)
+}
+
