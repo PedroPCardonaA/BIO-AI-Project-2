@@ -442,3 +442,181 @@ pub fn route_preserving_crossover_with_division(
     (child1, child2)
 }
 
+
+pub fn route_preserving_crossover_with_random_division(
+    parent1: &Vec<Vec<usize>>, 
+    parent2: &Vec<Vec<usize>>, 
+    instance: &Instance,
+    division_rate: f64
+) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
+    use rand::Rng;
+    use rand::seq::SliceRandom;
+    let mut rng = rand::rng();
+    let nurse_count = parent1.len();
+    let patient_count = instance.patients.len();
+
+    // Initialize children with empty routes for each nurse.
+    let mut child1 = vec![Vec::new(); nurse_count];
+    let mut child2 = vec![Vec::new(); nurse_count];
+    let mut used_patients: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    let mut assigned_nurses: std::collections::HashSet<usize> = std::collections::HashSet::new();
+
+    // Step 1: Identify common routes (including mirrored routes)
+    let mut route_map = std::collections::HashMap::new();
+    for nurse in 0..nurse_count {
+        route_map.insert(parent1[nurse].clone(), nurse);
+    }
+
+    for nurse2 in 0..nurse_count {
+        // Check for an exact match between parent2 and parent1.
+        if let Some(&nurse1) = route_map.get(&parent2[nurse2]) {
+            if !assigned_nurses.contains(&nurse1) && !assigned_nurses.contains(&nurse2) {
+                child1[nurse1] = parent1[nurse1].clone();
+                child2[nurse1] = parent2[nurse2].clone();
+                used_patients.extend(&child1[nurse1]);
+                assigned_nurses.insert(nurse1);
+                assigned_nurses.insert(nurse2);
+            }
+        } else {
+            // Check for a mirrored route: reverse parent2's route and compare.
+            let mut reversed_route = parent2[nurse2].clone();
+            reversed_route.reverse();
+            if let Some(&nurse1) = route_map.get(&reversed_route) {
+                if !assigned_nurses.contains(&nurse1) && !assigned_nurses.contains(&nurse2) {
+                    child1[nurse1] = parent1[nurse1].clone();
+                    child2[nurse1] = parent1[nurse1].clone();
+                    used_patients.extend(&child1[nurse1]);
+                    assigned_nurses.insert(nurse1);
+                    assigned_nurses.insert(nurse2);
+                }
+            }
+        }
+    }
+
+    // Step 2: Collect remaining unassigned patients.
+    let mut remaining_patients: Vec<usize> = (1..=patient_count)
+        .filter(|p| !used_patients.contains(p))
+        .collect();
+    remaining_patients.shuffle(&mut rng);
+
+    // Step 3: Assign remaining patients using an insertion heuristic.
+    for patient in remaining_patients {
+        let mut best_nurse = 0;
+        let mut best_increase = f64::MAX;
+
+        for nurse in 0..nurse_count {
+            let route = &child1[nurse];
+            let last_patient = route.last().copied().unwrap_or(0); // 0 represents the depot.
+            let increase = instance.travel_times[last_patient][patient] 
+                         + instance.travel_times[patient][0];
+            if increase < best_increase {
+                best_increase = increase;
+                best_nurse = nurse;
+            }
+        }
+        child1[best_nurse].push(patient);
+        child2[best_nurse].push(patient);
+    }
+
+    // Step 4: Ensure nurse capacities are respected.
+    for nurse in 0..nurse_count {
+        let mut total_demand: f64 = child1[nurse]
+            .iter()
+            .map(|p| instance.patients[&p.to_string()].demand)
+            .sum();
+
+        while total_demand > instance.nurses[0].get_capacity() as f64 {
+            if let Some(moved_patient) = child1[nurse].pop() {
+                let new_nurse = rng.random_range(0..nurse_count);
+                child1[new_nurse].push(moved_patient);
+                child2[new_nurse].push(moved_patient);
+
+                total_demand = child1[nurse]
+                    .iter()
+                    .map(|p| instance.patients[&p.to_string()].demand)
+                    .sum();
+            } else {
+                break; // Prevent infinite loop if no more patients can be moved.
+            }
+        }
+    }
+
+    // Helper closure to compute route cost (depot -> first patient, between patients, and back to depot).
+    let compute_route_cost = |route: &Vec<usize>| -> f64 {
+        if route.is_empty() {
+            0.0
+        } else {
+            let mut cost = instance.travel_times[0][route[0]];
+            for window in route.windows(2) {
+                cost += instance.travel_times[window[0]][window[1]];
+            }
+            cost + instance.travel_times[*route.last().unwrap()][0]
+        }
+    };
+
+    // Step 5: (Probabilistic) Division:
+    // With probability division_rate, split the longest route (with at least 2 patients)
+    // and insert the removed segment into a randomly chosen target route.
+    if rng.random::<f64>() < division_rate {
+        // Process child1.
+        {
+            // Identify the longest route that can be split.
+            let longest_route_idx = (0..nurse_count)
+                .filter(|&i| child1[i].len() >= 2)
+                .max_by(|&i, &j| {
+                    compute_route_cost(&child1[i])
+                        .partial_cmp(&compute_route_cost(&child1[j]))
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            if let Some(split_idx) = longest_route_idx {
+                let route_len = child1[split_idx].len();
+                let split_point = rng.random_range(1..route_len); // Ensure both segments are non-empty.
+                let relocate_front = rng.random_bool(0.5);
+                let relocated_segment: Vec<usize>;
+                if relocate_front {
+                    relocated_segment = child1[split_idx].drain(0..split_point).collect();
+                } else {
+                    relocated_segment = child1[split_idx].split_off(split_point);
+                }
+                // Choose a target route (different from the one we just split).
+                let target_candidates: Vec<usize> = (0..nurse_count)
+                    .filter(|&i| i != split_idx)
+                    .collect();
+                let target_idx = *target_candidates.choose(&mut rng).unwrap();
+                // Choose a random insertion position in the target route.
+                let insert_pos = rng.random_range(0..=child1[target_idx].len());
+                child1[target_idx].splice(insert_pos..insert_pos, relocated_segment);
+            }
+        }
+
+        // Process child2 similarly.
+        {
+            let longest_route_idx = (0..nurse_count)
+                .filter(|&i| child2[i].len() >= 2)
+                .max_by(|&i, &j| {
+                    compute_route_cost(&child2[i])
+                        .partial_cmp(&compute_route_cost(&child2[j]))
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            if let Some(split_idx) = longest_route_idx {
+                let route_len = child2[split_idx].len();
+                let split_point = rng.random_range(1..route_len);
+                let relocate_front = rng.random_bool(0.5);
+                let relocated_segment: Vec<usize>;
+                if relocate_front {
+                    relocated_segment = child2[split_idx].drain(0..split_point).collect();
+                } else {
+                    relocated_segment = child2[split_idx].split_off(split_point);
+                }
+                let target_candidates: Vec<usize> = (0..nurse_count)
+                    .filter(|&i| i != split_idx)
+                    .collect();
+                let target_idx = *target_candidates.choose(&mut rng).unwrap();
+                let insert_pos = rng.random_range(0..=child2[target_idx].len());
+                child2[target_idx].splice(insert_pos..insert_pos, relocated_segment);
+            }
+        }
+    }
+
+    (child1, child2)
+}
