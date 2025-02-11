@@ -1,6 +1,6 @@
 use rand::seq::{IndexedRandom, IteratorRandom};
 use structs::instance::Instance;
-use ea_components::{crossover::route_preserving_crossover, generate_population::generate_population_heuristic_with_workload, mutation::mutate_relocate_patient, niching::fitness_sharing_adjustment, selection::tournament_selection, fitness::fitness};
+use ea_components::{crossover::route_preserving_crossover, fitness::fitness, generate_population::{generate_population_combined, generate_population_heuristic_with_workload}, mutation::mutate_relocate_patient, niching::fitness_sharing_adjustment, selection::tournament_selection};
 use std::{collections::HashMap, sync::{Arc, Mutex, RwLock}, thread};
 use utils::{plot_metrics::plot_fitness, plot_map::plot_map, textual_answer::save_textual_solution_to_file};
 use std::time::Instant;
@@ -77,7 +77,7 @@ pub fn evolutionary_algorithm(
         let handle = thread::spawn(move || {
             // Generate an initial subpopulation for this island.
             let mut sub_population =
-                generate_population_heuristic_with_workload(sub_population_size, &instance);
+                generate_population_combined(sub_population_size, &instance);
             let mut fitness_values: Vec<f64> = sub_population
                 .iter()
                 .map(|individual| {
