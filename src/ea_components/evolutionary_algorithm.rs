@@ -4,7 +4,7 @@ use rand::seq::{IndexedRandom, IteratorRandom};
 
 use crate::{structs::instance::Instance, utils::plot_metrics::plot_fitness};
 
-use super::{crossover::route_preserving_crossover, fitness::fitness, generate_population::{generate_population_combined, generate_population_heuristic_with_workload}, mutation::mutate_relocate_patient, niching::fitness_sharing_adjustment, selection::tournament_selection};
+use super::{crossover::route_preserving_crossover, fitness::fitness, generate_population::{generate_population_combined, generate_population_heuristic_with_workload}, mutation::{mutate_local_improvement, mutate_relocate_patient}, niching::fitness_sharing_adjustment, selection::tournament_selection};
 
 
 pub struct IslandResult {
@@ -144,8 +144,8 @@ pub fn evolutionary_algorithm(
                     let (mut child1, mut child2) =
                         route_preserving_crossover(&parent1, &parent2, &instance);
                     // Mutation: relocate a patient.
-                    mutate_relocate_patient(&mut child1, mutation_probability);
-                    mutate_relocate_patient(&mut child2, mutation_probability);
+                    mutate_local_improvement(&mut child1, 0.5, &instance);
+                    mutate_local_improvement(&mut child2, 0.5, &instance);
                     new_population.push(child1);
                     if new_population.len() < sub_population_size {
                         new_population.push(child2);

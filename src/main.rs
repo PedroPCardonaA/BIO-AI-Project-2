@@ -8,19 +8,19 @@ mod utils;
 mod ea_components;
 
 fn main() {
-    let instance = utils::parse_data::parse_data("src/data/train/train_1.json");
+    let instance = utils::parse_data::parse_data("src/data/train/train_9.json");
     
     let start_time = Instant::now();
     let best_solution = evolutionary_algorithm(
             &instance,
-            200,
-            15000,
+            104,
+            500,
             20,
             0.2,
             1.2,
-            1000,
+            25,
             8,
-            2500,
+            25,
         );
 
     // Calculates the elapsed time since the timer started.
