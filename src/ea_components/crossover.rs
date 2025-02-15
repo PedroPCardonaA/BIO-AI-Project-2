@@ -4,6 +4,12 @@ use rand::{seq::{IndexedRandom, IteratorRandom, SliceRandom}, Rng};
 
 use crate::structs::instance::Instance;
 
+
+use rayon::prelude::*;
+use std::sync::Arc;
+
+use super::fitness::fitness;
+
 pub fn edge_crossover(parent1: &Vec<Vec<usize>>, parent2: &Vec<Vec<usize>>) -> Vec<Vec<usize>> {
     let mut rng = rand::rng();
     let nurse_count = parent1.len();
@@ -615,6 +621,121 @@ pub fn route_preserving_crossover_with_random_division(
                 let insert_pos = rng.random_range(0..=child2[target_idx].len());
                 child2[target_idx].splice(insert_pos..insert_pos, relocated_segment);
             }
+        }
+    }
+
+    (child1, child2)
+}
+
+
+
+
+pub fn select_delete_fix_crossover(
+    parent1: &Vec<Vec<usize>>,
+    parent2: &Vec<Vec<usize>>,
+    instance: &Instance,
+    crossover_rate: f64,
+) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
+
+
+    // Create a random number generator.
+    let mut rng = rand::rng();
+
+    // If the crossover rate is not met, return the parents as they are.
+    if rng.random::<f64>() > crossover_rate {
+        return (parent1.clone(), parent2.clone());
+    }
+
+    let nurse_count = parent1.len();
+
+    // Select a random nurse route index from each parent.
+    let route_idx1 = rng.random_range(0..nurse_count);
+    let route_idx2 = rng.random_range(0..nurse_count);
+    let selected_route_parent1 = parent1[route_idx1].clone();
+    let selected_route_parent2 = parent2[route_idx2].clone();
+
+    // Create children as clones of the parents.
+    let mut child1 = parent1.clone();
+    let mut child2 = parent2.clone();
+
+    // For child1, remove from every route any patient that appears in parent2's selected route.
+    // Store the removed patients so they can be reinserted.
+    let mut missing_from_child1 = Vec::new();
+    for route in child1.iter_mut() {
+        let mut i = 0;
+        while i < route.len() {
+            if selected_route_parent2.contains(&route[i]) {
+                missing_from_child1.push(route.remove(i));
+            } else {
+                i += 1;
+            }
+        }
+    }
+
+    // For child2, remove from every route any patient that appears in parent1's selected route.
+    let mut missing_from_child2 = Vec::new();
+    for route in child2.iter_mut() {
+        let mut i = 0;
+        while i < route.len() {
+            if selected_route_parent1.contains(&route[i]) {
+                missing_from_child2.push(route.remove(i));
+            } else {
+                i += 1;
+            }
+        }
+    }
+
+    // Wrap instance in an Arc for thread safety in parallel evaluations.
+    let instance_arc = Arc::new(instance.clone());
+
+    // "Fix" child1: reinsert each missing patient at the best insertion (lowest overall fitness).
+    for patient in missing_from_child1 {
+        // Build candidate insertion positions as (route_index, insertion_position).
+        let candidate_positions: Vec<(usize, usize)> = (0..child1.len())
+            .flat_map(|r_idx| {
+                // Allow insertion at any position in route, including at the beginning or end.
+                (0..=child1[r_idx].len()).map(move |pos| (r_idx, pos))
+            })
+            .collect();
+
+        // Evaluate candidates in parallel.
+        let best_insertion = candidate_positions
+            .par_iter()
+            .map(|&(r_idx, pos)| {
+                let mut candidate = child1.clone();
+                candidate[r_idx].insert(pos, patient);
+                let candidate_fit = fitness(&candidate, &instance_arc);
+                ((r_idx, pos), candidate_fit)
+            })
+            .min_by(|(_, fit_a), (_, fit_b)| fit_a.partial_cmp(fit_b).unwrap())
+            .map(|(insertion, _)| insertion);
+
+        if let Some((best_route_idx, best_position)) = best_insertion {
+            child1[best_route_idx].insert(best_position, patient);
+        }
+    }
+
+    // "Fix" child2 by reinserting each missing patient using the fitness function.
+    for patient in missing_from_child2 {
+        let candidate_positions: Vec<(usize, usize)> = (0..child2.len())
+            .flat_map(|r_idx| {
+                (0..=child2[r_idx].len()).map(move |pos| (r_idx, pos))
+            })
+            .collect();
+
+        let best_insertion = candidate_positions
+            .par_iter()
+            .map(|&(r_idx, pos)| {
+                let mut candidate = child2.clone();
+                candidate[r_idx].insert(pos, patient);
+                let candidate_fit = fitness(&candidate, &instance_arc);
+                ((r_idx, pos), candidate_fit)
+            })
+            .min_by(|(_, fit_a), (_, fit_b)| fit_a.partial_cmp(fit_b).unwrap())
+            .map(|(insertion, _)| insertion);
+
+        if let Some((best_route_idx, best_position)) = best_insertion {
+            child2[best_route_idx].insert(best_position, patient);
         }
     }
 
