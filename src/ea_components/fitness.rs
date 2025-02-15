@@ -3,9 +3,9 @@ use crate::structs::instance::Instance;
 pub fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
     let mut total_travel_time = 0.0;
     let mut total_penalty = 0.0;
-    let penalty_factor = 2.0; // Higher value means higher penalty for returning too late
-    let penalty_factor_time = 30.0; // Higher value means higher penalty for traveling too much between patients
-    let penalty_factor_violation = 50.0; // Higher value means higher penalty for violating the constraints
+    let penalty_factor = 1.0; // Higher value means higher penalty for returning too late
+    let penalty_factor_time = 5.0; // Higher value means higher penalty for traveling too much between patients
+    let penalty_factor_violation = 15.0; // Higher value means higher penalty for violating the constraints
 
     // Calculate the total travel time for each nurse
     let mut nurses = instance.nurses.clone();
