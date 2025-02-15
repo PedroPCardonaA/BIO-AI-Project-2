@@ -2,7 +2,8 @@ use rand::{seq::IndexedRandom, Rng};
 
 use crate::structs::instance::Instance;
 use super::fitness::fitness;
-
+use rayon::prelude::*;
+use std::cmp::Ordering;
 
 pub fn mutate_relocate_patient(
     individual: &mut Vec<Vec<usize>>,
@@ -76,73 +77,95 @@ pub fn swap_mutation(individual: &mut Vec<Vec<usize>>, mutation_rate: f64) {
     }
 }
 
-use rayon::prelude::*;
-use std::cmp::Ordering;
-
 pub fn mutate_local_improvement(
     individual: &mut Vec<Vec<usize>>,
     mutation_rate: f64,
     instance: &Instance,
 ) {
-    // Use thread_rng instead of rand::rng() if possible.
     let mut rng = rand::rng();
-
-    // With probability 1 - mutation_rate, do nothing.
-    if rng.random::<f64>() > mutation_rate {
-        return;
-    }
-
     let num_nurses = individual.len();
     if num_nurses < 2 {
         return;
     }
 
-    // Iterate over each nurse's route.
-    for i in 0..num_nurses {
-        if !individual[i].is_empty() && rng.random::<f64>() < mutation_rate {
-            // Randomly select a patient from nurse i's route.
-            let patient_index = rng.random_range(0..individual[i].len());
-            let patient = individual[i][patient_index];
-            let original_fitness = fitness(&individual, instance);
+    // With probability mutation_rate, perform local search improvement.
+    // Otherwise, perform a random swap.
+    if rng.random::<f64>() < mutation_rate {
+        // Iterate over each nurse's route to potentially perform local search moves.
+        for i in 0..num_nurses {
+            if !individual[i].is_empty() && rng.random::<f64>() < mutation_rate {
+                // Randomly select a patient from nurse i's route.
+                let patient_index = rng.random_range(0..individual[i].len());
+                let patient = individual[i][patient_index];
+                let original_fitness = fitness(&individual, instance);
 
-            // Build a list of candidate moves as (target_nurse, insertion_index).
-            let candidate_moves: Vec<(usize, usize)> = (0..num_nurses)
-                .flat_map(|j| {
-                    // If moving within the same nurse, removal decreases the route length by 1.
-                    let range = if i == j {
-                        0..=individual[j].len().saturating_sub(1)
-                    } else {
-                        0..=individual[j].len()
-                    };
-                    range.map(move |k| (j, k))
-                })
-                // Skip the case where the patient would be inserted in the same location.
-                .filter(|&(j, k)| !(i == j && k == patient_index))
-                .collect();
+                // Build a list of candidate moves as (target_nurse, insertion_index).
+                let candidate_moves: Vec<(usize, usize)> = (0..num_nurses)
+                    .flat_map(|j| {
+                        // When moving within the same nurse, removal decreases the route length.
+                        let range = if i == j {
+                            0..=individual[j].len().saturating_sub(1)
+                        } else {
+                            0..=individual[j].len()
+                        };
+                        range.map(move |k| (j, k))
+                    })
+                    // Skip the case where the patient would be reinserted in the same location.
+                    .filter(|&(j, k)| !(i == j && k == patient_index))
+                    .collect();
 
-            // Evaluate candidate moves in parallel.
-            let best_candidate = candidate_moves
-                .par_iter()
-                .filter_map(|&(j, k)| {
-                    let mut new_individual = individual.clone();
-                    // Remove the patient from the original route.
-                    new_individual[i].remove(patient_index);
-                    // Insert the patient in the candidate route at position k.
-                    new_individual[j].insert(k, patient);
-                    let candidate_fitness = fitness(&new_individual, instance);
-                    if candidate_fitness < original_fitness {
-                        Some((j, k, candidate_fitness))
-                    } else {
-                        None
-                    }
-                })
-                .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(Ordering::Equal));
+                // Evaluate candidate moves in parallel.
+                let best_candidate = candidate_moves
+                    .par_iter()
+                    .filter_map(|&(j, k)| {
+                        let mut new_individual = individual.clone();
+                        // Remove the patient from the original route.
+                        new_individual[i].remove(patient_index);
+                        // Insert the patient in the candidate route at position k.
+                        new_individual[j].insert(k, patient);
+                        let candidate_fitness = fitness(&new_individual, instance);
+                        if candidate_fitness < original_fitness {
+                            Some((j, k, candidate_fitness))
+                        } else {
+                            None
+                        }
+                    })
+                    .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(Ordering::Equal));
 
-            // If a better candidate move was found, update the individual.
-            if let Some((best_nurse, best_position, _)) = best_candidate {
-                individual[i].remove(patient_index);
-                individual[best_nurse].insert(best_position, patient);
+                // If a better candidate move was found, update the individual.
+                if let Some((best_nurse, best_position, _)) = best_candidate {
+                    individual[i].remove(patient_index);
+                    individual[best_nurse].insert(best_position, patient);
+                }
             }
         }
+    } else {
+        // Otherwise, perform a random swap mutation.
+        // Collect indices of nurses with non-empty routes.
+        let non_empty_nurses: Vec<usize> = (0..num_nurses)
+            .filter(|&i| !individual[i].is_empty())
+            .collect();
+
+        if non_empty_nurses.len() < 2 {
+            return;
+        }
+
+        // Randomly select two distinct nurses.
+        let nurse_a = non_empty_nurses[rng.random_range(0..non_empty_nurses.len())];
+        let nurse_b = loop {
+            let candidate = non_empty_nurses[rng.random_range(0..non_empty_nurses.len())];
+            if candidate != nurse_a {
+                break candidate;
+            }
+        };
+
+        // Randomly select one patient index from each nurse's route.
+        let idx_a = rng.random_range(0..individual[nurse_a].len());
+        let idx_b = rng.random_range(0..individual[nurse_b].len());
+
+        // Swap the two patients.
+        let temp = individual[nurse_a][idx_a];
+        individual[nurse_a][idx_a] = individual[nurse_b][idx_b];
+        individual[nurse_b][idx_b] = temp;
     }
 }

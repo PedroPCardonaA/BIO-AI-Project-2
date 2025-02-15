@@ -8,7 +8,7 @@ mod utils;
 mod ea_components;
 
 fn main() {
-    let instance = utils::parse_data::parse_data("src/data/train/train_9.json");
+    let instance = utils::parse_data::parse_data("src/data/train/train_1.json");
     
     let start_time = Instant::now();
     let best_solution = evolutionary_algorithm(
