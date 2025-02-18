@@ -1,10 +1,10 @@
 use std::{collections::HashMap, sync::{Arc, Mutex, RwLock}, thread};
 
-use rand::seq::{IndexedRandom, IteratorRandom};
+use rand::{seq::{IndexedRandom, IteratorRandom}, Rng};
 
 use crate::{structs::instance::Instance, utils::plot_metrics::plot_fitness};
 
-use super::{crossover::{route_preserving_crossover, select_delete_fix_crossover}, fitness::fitness, generate_population::{generate_population_combined, generate_population_heuristic_with_workload}, mutation::meta_mutation, niching::fitness_sharing_adjustment, selection::tournament_selection};
+use super::{crossover::{meta_crossover, route_preserving_crossover, select_delete_fix_crossover}, fitness::fitness, generate_population::{generate_population_combined, generate_population_heuristic_with_workload}, mutation::meta_mutation, niching::fitness_sharing_adjustment, selection::tournament_selection};
 
 
 pub struct IslandResult {
@@ -265,7 +265,7 @@ pub fn evolutionary_algorithm_crowding(
 
     // Shared fitness cache: maps a (stringified) solution to its fitness value.
     let fitness_cache: Arc<RwLock<HashMap<String, f64>>> = Arc::new(RwLock::new(HashMap::new()));
-    // Shared migration pool (for islands to deposit their best individuals).
+    // Shared migration pool (for islands to deposit their individuals).
     let migration_pool: Arc<Mutex<Vec<Vec<Vec<usize>>>>> = Arc::new(Mutex::new(Vec::new()));
 
     // Launch one thread per island.
@@ -317,19 +317,13 @@ pub fn evolutionary_algorithm_crowding(
             for gen in 0..generations {
                 // Migration: every migration_interval generations, perform migration.
                 if gen % migration_interval == 0 && gen > 0 {
-                    // Deposit the best individual of this island in the shared migration pool.
-                    let best_index = fitness_values
-                        .iter()
-                        .enumerate()
-                        .min_by(|(_, &fit_a), (_, &fit_b)| {
-                            fit_a.partial_cmp(&fit_b).unwrap()
-                        })
-                        .unwrap()
-                        .0;
-                    let best_individual = sub_population[best_index].clone();
+                    // Deposit a random individual of this island in the shared migration pool.
+                    let mut rng = rand::rng();
+                    let random_index = rng.random_range(0..sub_population.len());
+                    let random_individual = sub_population[random_index].clone();
                     {
                         let mut pool = migration_pool.lock().unwrap();
-                        pool.push(best_individual);
+                        pool.push(random_individual);
                     }
                     // Then, if there is any migrant available, replace our worst individual.
                     {
@@ -343,7 +337,7 @@ pub fn evolutionary_algorithm_crowding(
                                 })
                                 .unwrap()
                                 .0;
-                            let mut rng = rand::rng();
+                            let mut rng = rand::thread_rng();
                             if let Some(migrant) = pool.iter().choose(&mut rng) {
                                 sub_population[worst_index] = migrant.clone();
                                 // Recalculate fitness using the cache.
@@ -377,7 +371,7 @@ pub fn evolutionary_algorithm_crowding(
                         tournament_selection(&sub_population, &fitness_values, tournament_size);
                     // Crossover: route-preserving (or select-delete-fix) crossover.
                     let (mut child1, mut child2) =
-                        select_delete_fix_crossover(&parent1, &parent2, &instance, 0.2);
+                        meta_crossover(&parent1, &parent2, &instance, 1.0);
                     // Mutation.
                     meta_mutation(&mut child1, 1.0, &instance);
                     meta_mutation(&mut child2, 1.0, &instance);
