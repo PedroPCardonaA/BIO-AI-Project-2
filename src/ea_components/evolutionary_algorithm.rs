@@ -4,7 +4,7 @@ use rand::seq::{IndexedRandom, IteratorRandom};
 
 use crate::{structs::instance::Instance, utils::plot_metrics::plot_fitness};
 
-use super::{crossover::{route_preserving_crossover, select_delete_fix_crossover}, fitness::fitness, generate_population::{generate_population_combined, generate_population_heuristic_with_workload}, mutation::{mutate_local_improvement, mutate_relocate_patient}, niching::fitness_sharing_adjustment, selection::tournament_selection};
+use super::{crossover::{route_preserving_crossover, select_delete_fix_crossover}, fitness::fitness, generate_population::{generate_population_combined, generate_population_heuristic_with_workload}, mutation::meta_mutation, niching::fitness_sharing_adjustment, selection::tournament_selection};
 
 
 pub struct IslandResult {
@@ -144,8 +144,8 @@ pub fn evolutionary_algorithm(
                     let (mut child1, mut child2) =
                         select_delete_fix_crossover(&parent1, &parent2, &instance, 0.2);
                     // Mutation: relocate a patient.
-                    mutate_local_improvement(&mut child1, 0.5, &instance);
-                    mutate_local_improvement(&mut child2, 0.5, &instance);
+                    meta_mutation(&mut child1, 1.0, &instance);
+                    meta_mutation(&mut child2, 1.0, &instance);
                     new_population.push(child1);
                     if new_population.len() < sub_population_size {
                         new_population.push(child2);
@@ -379,8 +379,8 @@ pub fn evolutionary_algorithm_crowding(
                     let (mut child1, mut child2) =
                         select_delete_fix_crossover(&parent1, &parent2, &instance, 0.2);
                     // Mutation.
-                    mutate_local_improvement(&mut child1, 0.5, &instance);
-                    mutate_local_improvement(&mut child2, 0.5, &instance);
+                    meta_mutation(&mut child1, 1.0, &instance);
+                    meta_mutation(&mut child2, 1.0, &instance);
 
                     // Determine the best pairing based on similarity.
                     let pairing1 = distance(&parent1, &child1) + distance(&parent2, &child2);
