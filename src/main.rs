@@ -14,7 +14,7 @@ fn main() {
     let best_solution = evolutionary_algorithm_crowding(
             &instance,
             111,
-            600,
+            500,
             5,
             0.2,
             1.2,
