@@ -741,3 +741,85 @@ pub fn select_delete_fix_crossover(
 
     (child1, child2)
 }
+
+
+pub fn random_route_mixing_crossover(
+    parent1: &Vec<Vec<usize>>, 
+    parent2: &Vec<Vec<usize>>,
+    crossover_rate: f64,
+) -> Vec<Vec<usize>> {
+    let mut rng = rand::rng();
+    // With probability not meeting the crossover rate, return a clone of parent1.
+    if rng.random::<f64>() > crossover_rate {
+        return parent1.clone();
+    }
+
+    // All patients should appear exactly once across the routes.
+    // We flatten one parent's routes (they should represent the same set as parent2).
+    let mut all_patients: Vec<usize> = parent1.iter().flatten().cloned().collect();
+    // Shuffle the list completely to break any route structure.
+    all_patients.shuffle(&mut rng);
+
+    // Determine the number of nurses (routes).
+    let nurse_count = parent1.len();
+    let total_patients = all_patients.len();
+
+    // Compute the average route size for each nurse from the two parents.
+    let mut avg_sizes = Vec::with_capacity(nurse_count);
+    for i in 0..nurse_count {
+        // Note: if parent routes have different lengths, take the average.
+        let size = (parent1[i].len() + parent2[i].len()) / 2;
+        avg_sizes.push(size);
+    }
+    let sum_sizes: usize = avg_sizes.iter().sum();
+    // Compute proportions for each nurse.
+    let proportions: Vec<f64> = avg_sizes.iter().map(|&s| s as f64 / sum_sizes as f64).collect();
+    // Determine the number of patients for each nurse in the offspring.
+    let mut route_sizes: Vec<usize> = proportions
+        .iter()
+        .map(|&p| (p * total_patients as f64).round() as usize)
+        .collect();
+    // Adjust in case of rounding errors so that the total equals total_patients.
+    let diff = total_patients as isize - route_sizes.iter().sum::<usize>() as isize;
+    if diff != 0 {
+        // Adjust the first route arbitrarily.
+        route_sizes[0] = (route_sizes[0] as isize + diff) as usize;
+    }
+
+    // Partition the shuffled patient list according to route_sizes.
+    let mut new_solution = Vec::with_capacity(nurse_count);
+    let mut index = 0;
+    for &size in &route_sizes {
+        if index + size <= total_patients {
+            new_solution.push(all_patients[index..index + size].to_vec());
+            index += size;
+        } else {
+            new_solution.push(all_patients[index..].to_vec());
+            index = total_patients;
+        }
+    }
+    // In case there are fewer routes than nurses, add empty routes.
+    while new_solution.len() < nurse_count {
+        new_solution.push(Vec::new());
+    }
+
+    new_solution
+}
+
+
+pub fn meta_crossover(
+    parent1: &Vec<Vec<usize>>,
+    parent2: &Vec<Vec<usize>>,
+    instance: &Instance,
+    crossover_rate: f64,
+) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
+    let mut rng = rand::rng();
+    if rng.random::<f64>() < 0.8 {
+        // Use select-delete-fix crossover.
+        select_delete_fix_crossover(parent1, parent2, instance, crossover_rate)
+    } else {
+        // Use random-route-mixing crossover and duplicate the result.
+        let offspring = random_route_mixing_crossover(parent1, parent2, crossover_rate);
+        (offspring.clone(), offspring)
+    }
+}
