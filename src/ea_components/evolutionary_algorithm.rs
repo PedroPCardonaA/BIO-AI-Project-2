@@ -333,7 +333,7 @@ pub fn evolutionary_algorithm_crowding(
                     }
                     // Then, if there is any migrant available, replace our worst individual.
                     {
-                        let mut pool = migration_pool.lock().unwrap();
+                        let pool = migration_pool.lock().unwrap();
                         if !pool.is_empty() {
                             let worst_index = fitness_values
                                 .iter()
@@ -343,7 +343,7 @@ pub fn evolutionary_algorithm_crowding(
                                 })
                                 .unwrap()
                                 .0;
-                            let mut rng = rand::thread_rng();
+                            let mut rng = rand::rng();
                             if let Some(migrant) = pool.iter().choose(&mut rng) {
                                 sub_population[worst_index] = migrant.clone();
                                 // Recalculate fitness using the cache.
