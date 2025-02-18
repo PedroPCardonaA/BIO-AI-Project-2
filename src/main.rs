@@ -1,7 +1,7 @@
 
 use std::time::Instant;
 
-use ea_components::evolutionary_algorithm::evolutionary_algorithm;
+use ea_components::evolutionary_algorithm::{evolutionary_algorithm, evolutionary_algorithm_crowding};
 use utils::{plot_map::plot_map, textual_answer::save_textual_solution_to_file};
 mod structs;
 mod utils;
@@ -11,16 +11,16 @@ fn main() {
     let instance = utils::parse_data::parse_data("src/data/train/train_9.json");
     
     let start_time = Instant::now();
-    let best_solution = evolutionary_algorithm(
+    let best_solution = evolutionary_algorithm_crowding(
             &instance,
-            104,
-            500,
-            20,
+            111,
+            300,
+            5,
             0.2,
             1.2,
             25,
-            8,
-            25,
+            3,
+            75,
         );
 
     // Calculates the elapsed time since the timer started.
