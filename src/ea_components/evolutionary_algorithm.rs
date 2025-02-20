@@ -245,7 +245,6 @@ fn distance(ind1: &Vec<Vec<usize>>, ind2: &Vec<Vec<usize>>) -> usize {
     };
     diff
 }
-
 pub fn evolutionary_algorithm_crowding(
     instance: &Instance,
     population_size: usize,
@@ -360,8 +359,10 @@ pub fn evolutionary_algorithm_crowding(
                     }
                 }
 
-                // Create a new population using deterministic crowding (no elitism).
+                // Create a new population using adaptive θ-crowding.
                 let mut new_population = Vec::with_capacity(sub_population_size);
+                // Calculate the current θ value: starting at 1 (probabilistic) and decreasing to 0 (deterministic).
+                let theta = 1.0 - (gen as f64) / (generations as f64);
                 // Fill new_population until we reach the desired size.
                 while new_population.len() < sub_population_size {
                     // Selection: choose two parents.
@@ -379,17 +380,23 @@ pub fn evolutionary_algorithm_crowding(
                     // Determine the best pairing based on similarity.
                     let pairing1 = distance(&parent1, &child1) + distance(&parent2, &child2);
                     let pairing2 = distance(&parent1, &child2) + distance(&parent2, &child1);
+                    
+                    let mut rng = rand::thread_rng();
                     if pairing1 <= pairing2 {
                         // For pairing1, each offspring competes with its corresponding parent.
-                        let winner1 = if get_fitness(&child1) < get_fitness(&parent1) {
-                            child1
+                        let winner1 = if theta > 0.0 {
+                            let diff = get_fitness(&child1) - get_fitness(&parent1);
+                            let p = 1.0 / (1.0 + (diff / theta).exp());
+                            if rng.gen::<f64>() < p { child1 } else { parent1 }
                         } else {
-                            parent1
+                            if get_fitness(&child1) < get_fitness(&parent1) { child1 } else { parent1 }
                         };
-                        let winner2 = if get_fitness(&child2) < get_fitness(&parent2) {
-                            child2
+                        let winner2 = if theta > 0.0 {
+                            let diff = get_fitness(&child2) - get_fitness(&parent2);
+                            let p = 1.0 / (1.0 + (diff / theta).exp());
+                            if rng.gen::<f64>() < p { child2 } else { parent2 }
                         } else {
-                            parent2
+                            if get_fitness(&child2) < get_fitness(&parent2) { child2 } else { parent2 }
                         };
                         new_population.push(winner1);
                         if new_population.len() < sub_population_size {
@@ -397,15 +404,19 @@ pub fn evolutionary_algorithm_crowding(
                         }
                     } else {
                         // For pairing2, swap the comparisons.
-                        let winner1 = if get_fitness(&child2) < get_fitness(&parent1) {
-                            child2
+                        let winner1 = if theta > 0.0 {
+                            let diff = get_fitness(&child2) - get_fitness(&parent1);
+                            let p = 1.0 / (1.0 + (diff / theta).exp());
+                            if rng.gen::<f64>() < p { child2 } else { parent1 }
                         } else {
-                            parent1
+                            if get_fitness(&child2) < get_fitness(&parent1) { child2 } else { parent1 }
                         };
-                        let winner2 = if get_fitness(&child1) < get_fitness(&parent2) {
-                            child1
+                        let winner2 = if theta > 0.0 {
+                            let diff = get_fitness(&child1) - get_fitness(&parent2);
+                            let p = 1.0 / (1.0 + (diff / theta).exp());
+                            if rng.gen::<f64>() < p { child1 } else { parent2 }
                         } else {
-                            parent2
+                            if get_fitness(&child1) < get_fitness(&parent2) { child1 } else { parent2 }
                         };
                         new_population.push(winner1);
                         if new_population.len() < sub_population_size {
