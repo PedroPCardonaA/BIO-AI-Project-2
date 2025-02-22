@@ -20,13 +20,13 @@ fn main() {
     let best_solution = evolutionary_algorithm_crowding(
             &instance,
             111,
-            200,
+            300,
             5,
             0.2,
             1.2,
             10,
             3,
-            95,
+            25,
         );
 
     // Calculates the elapsed time since the timer started.

@@ -814,7 +814,7 @@ pub fn meta_crossover(
     crossover_rate: f64,
 ) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
     let mut rng = rand::rng();
-    if rng.random::<f64>() < 0.8 {
+    if rng.random::<f64>() < 0.7 {
         // Use select-delete-fix crossover.
         select_delete_fix_crossover(parent1, parent2, instance, crossover_rate)
     } else {

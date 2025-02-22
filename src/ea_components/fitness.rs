@@ -72,9 +72,9 @@ pub fn fitness(solution: &Vec<Vec<usize>>, instance: &Instance) -> f64 {
     let mut total_penalty = 0.0;
 
     // Unique penalty factors for each constraint violation.
-    let penalty_factor_late = 3.0;      // Penalty per time unit past patient's end time.
-    let penalty_factor_capacity = 1.0;  // Penalty per unit of load exceeding capacity.
-    let penalty_factor_return = 1.0;    // Penalty per time unit past depot return time.
+    let penalty_factor_late = 5.0;      // Penalty per time unit past patient's end time.
+    let penalty_factor_capacity = 0.5;  // Penalty per unit of load exceeding capacity.
+    let penalty_factor_return = 0.5;    // Penalty per time unit past depot return time.
 
     // For each nurse and its corresponding route in the solution.
     for (nurse, route) in instance.nurses.iter().zip(solution.iter()) {
