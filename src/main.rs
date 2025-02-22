@@ -2,24 +2,30 @@
 use std::time::Instant;
 
 use ea_components::evolutionary_algorithm::{evolutionary_algorithm, evolutionary_algorithm_crowding};
-use utils::{plot_map::plot_map, textual_answer::save_textual_solution_to_file};
+use utils::{
+    plot_map::plot_map, 
+    textual_answer::save_textual_solution_to_file, 
+    create_file::save_solution_to_file, 
+    score_recorder::run_all_trains
+};
 mod structs;
 mod utils;
 mod ea_components;
 
 fn main() {
+    /*
     let instance = utils::parse_data::parse_data("src/data/train/train_9.json");
     
     let start_time = Instant::now();
     let best_solution = evolutionary_algorithm_crowding(
             &instance,
             111,
-            500,
+            200,
             5,
             0.2,
             1.2,
-            25,
-            4,
+            10,
+            3,
             95,
         );
 
@@ -35,6 +41,21 @@ fn main() {
     plot_map(&best_solution, &instance.patients, &instance.depot);
     save_textual_solution_to_file("output/solution.txt", &best_solution, &instance);
 
-    let _ = utils::create_file::save_solution_to_file(&best_solution, "output/solution.json");
+    let _ = save_solution_to_file(&best_solution, "output/solution.json");
+    */
+
+    // Run all training instances using the crowding algorithm.
+    run_all_trains( 
+        evolutionary_algorithm_crowding,
+        111,   // population_size
+        50,   // generations
+        5,     // tournament_size
+        0.2,   // mutation_probability
+        1.2,   // lambda
+        10,    // generation_to_print
+        3,     // num_islands
+        95,    // migration_interval
+    );
+
 }
 
