@@ -13,7 +13,7 @@ mod utils;
 mod ea_components;
 
 fn main() {
-    /*
+
     let instance = utils::parse_data::parse_data("src/data/train/train_9.json");
     
     let start_time = Instant::now();
@@ -42,10 +42,10 @@ fn main() {
     save_textual_solution_to_file("output/solution.txt", &best_solution, &instance);
 
     let _ = save_solution_to_file(&best_solution, "output/solution.json");
-    */
 
     // Run all training instances using the crowding algorithm.
-    run_all_trains( 
+    //TODO: Uncomment this line to run all training instances
+    /*run_all_trains( 
         evolutionary_algorithm_crowding,
         111,   // population_size
         50,   // generations
@@ -55,7 +55,7 @@ fn main() {
         10,    // generation_to_print
         3,     // num_islands
         95,    // migration_interval
-    );
+    );*/
 
 }
 
