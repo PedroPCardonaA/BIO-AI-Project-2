@@ -418,7 +418,29 @@ pub fn evolutionary_algorithm_crowding(
     overall_best_solution.unwrap()
 }
 
-
+/// Executes a parallelized evolutionary algorithm with crowding replacement for solving the home-care routing problem.
+///
+/// The function implements a genetic algorithm that minimizes the total travel time for home-care nurses
+/// by evolving a population of candidate solutions. It employs tournament selection, meta crossover, and meta mutation
+/// operators, along with an adaptive crowding replacement strategy to choose between parents and offspring based on fitness.
+/// Additionally, it periodically applies a diversity step by randomly replacing a portion of the worst individuals,
+/// which helps prevent premature convergence. 
+///
+/// # Parameters
+/// - `instance` - A reference to the problem instance containing depot, patient, nurse, and travel time data.
+/// - `population_size` - The total number of candidate solutions in the population.
+/// - `generations` - The number of generations (iterations) for which the population is evolved.
+/// - `tournament_size` - The number of individuals used in tournament selection for choosing parents.
+/// - `mutation_probability` - The probability of applying mutation to an offspring.
+/// - `lambda` - A parameter that influences the behavior of the meta crossover operator (e.g., the crossover rate).
+/// - `generation_to_print` - The frequency (in generations) at which the algorithm prints the best fitness value.
+/// - `num_islands` - The number of parallel sub-populations to evolve (typically set to 1 for a single population).
+/// - `migration_interval` - The interval, in generations, at which migration between sub-populations is performed (applicable when using multiple islands).
+///
+/// # Returns
+/// Returns the best overall solution found as a vector of routes, where each route is represented as a vector
+/// of patient IDs. Each route implicitly starts and ends at the depot, which is managed externally.
+///
 pub fn evolutionary_algorithm_crowding_one(
     instance: &Instance,
     population_size: usize,
@@ -430,6 +452,8 @@ pub fn evolutionary_algorithm_crowding_one(
     num_islands: usize,
     migration_interval: usize,
 ) -> Vec<Vec<usize>> {
+    
+    // STEP 1: Initialize shared parameters and resources.
     let sub_population_size = population_size / num_islands;
     let instance_arc = Arc::new(instance.clone());
     let fitness_cache: Arc<DashMap<String, f64>> = Arc::new(DashMap::new());
@@ -438,11 +462,14 @@ pub fn evolutionary_algorithm_crowding_one(
 
     let mut handles = Vec::new();
     for island_id in 0..num_islands {
+
+        // STEP 2: Clone shared resources for use in the spawned thread.
         let instance = instance_arc.clone();
         let fitness_cache = fitness_cache.clone();
         let migration_pool = migration_pool.clone();
         let handle = thread::spawn(move || {
-            // Generate the initial sub-population.
+
+            // STEP 3: Generate the initial sub-population and compute initial fitness values.
             let mut sub_population = generate_population_combined(sub_population_size, &instance);
             let mut fitness_values: Vec<f64> = sub_population
                 .iter()
@@ -458,7 +485,7 @@ pub fn evolutionary_algorithm_crowding_one(
                 })
                 .collect();
 
-            // Helper closure to evaluate fitness with cache.
+            // STEP 4: Define helper closures for fitness evaluation and random individual generation.
             let get_fitness = |ind: &Vec<Vec<usize>>| -> f64 {
                 let key = format!("{:?}", ind);
                 if let Some(val) = fitness_cache.get(&key) {
@@ -475,13 +502,12 @@ pub fn evolutionary_algorithm_crowding_one(
                 pop.remove(0)
             };
 
-            
-
             let mut fitness_history = Vec::new();
 
-
+            // STEP 5: Evolutionary loop over generations.
             for gen in 0..generations {
-                // ----- Migration block (unchanged) -----
+
+                // STEP 5.1: Migration Step - exchange best individual with worst from migration pool.
                 if gen % migration_interval == 0 && gen > 0 {
                     // Find best individual in the current island.
                     let best_index = fitness_values
@@ -531,16 +557,13 @@ pub fn evolutionary_algorithm_crowding_one(
                     }
                 }
 
-                                // ~~~~~~~~~~~~~~~~ DIVERSITY STEP ~~~~~~~~~~~~~~~~~ //
-                // Every 5% of the total generations, randomize the worst 80%.
-                // (Check that generations is at least 20, etc.)
+                // STEP 5.2: Diversity Step - periodically replace the worst 80% of individuals.
                 if gen > 0 && generations >= 20 && gen % (generations / 20) == 0 {
-                    // How many individuals to replace
+                    // Determine the number of individuals to replace.
                     let to_replace = (sub_population_size as f64 * 0.80).ceil() as usize;
-                    // Sort by fitness descending => worst first
+                    // Sort indices so that the worst individuals come first.
                     let mut indices: Vec<usize> = (0..sub_population_size).collect();
                     indices.sort_by(|&i, &j| {
-                        // compare fitness_values[j] with fitness_values[i] for descending
                         fitness_values[j]
                             .partial_cmp(&fitness_values[i])
                             .unwrap()
@@ -551,7 +574,7 @@ pub fn evolutionary_algorithm_crowding_one(
                         let idx = indices[k];
                         let new_sol = generate_random_individual();
                         sub_population[idx] = new_sol;
-                        // Recompute fitness
+                        // Recompute fitness for the new solution.
                         let key = format!("{:?}", sub_population[idx]);
                         let new_fit = if let Some(val) = fitness_cache.get(&key) {
                             *val
@@ -563,19 +586,17 @@ pub fn evolutionary_algorithm_crowding_one(
                         fitness_values[idx] = new_fit;
                     }
 
-                    // Print a message to see the effect
+                    // Log the outcome of the diversity step.
                     println!(
                         "Island {} Generation {}: Replaced {} worst individuals with random solutions.",
                         island_id, gen, to_replace
                     );
                 }
-                // ----------------------------------------
 
-                // Adaptive theta for replacement.
+                // STEP 5.3: Adaptive Parameter Calculation - update theta for crowding replacement.
                 let theta = 1.0 - (gen as f64) / (generations as f64);
 
-                // --- Selection, Crossover, and Mutation ---
-                // Here we use a tournament selection that returns (index, individual).
+                // STEP 5.4: Parent Selection, Crossover, and Mutation.
                 let (idx1, parent1) =
                     tournament_selection_index(&sub_population, &fitness_values, tournament_size);
                 let (idx2, parent2) =
@@ -585,12 +606,11 @@ pub fn evolutionary_algorithm_crowding_one(
                 meta_mutation(&mut child1, mutation_probability, &instance);
                 meta_mutation(&mut child2, mutation_probability, &instance);
 
-                // Improve routes for each offspring.
+                // STEP 5.5: Route Improvement - apply local improvements to offspring.
                 route_improvement(&instance, &mut child1, &*fitness_cache);
                 route_improvement(&instance, &mut child2, &*fitness_cache);
 
-                // --- Crowding Replacement ---
-                // Compute the pairing distances.
+                // STEP 5.6: Crowding Replacement - determine which individuals to retain.
                 let pairing1 = distance(&parent1, &child1) + distance(&parent2, &child2);
                 let pairing2 = distance(&parent1, &child2) + distance(&parent2, &child1);
                 let mut rng = rand::thread_rng();
@@ -660,10 +680,10 @@ pub fn evolutionary_algorithm_crowding_one(
                         }
                     };
                 }
-                // Replace the two selected individuals in the population.
+
+                // STEP 5.7: Update Population - replace the selected individuals and update their fitness.
                 sub_population[idx1] = new_ind1;
                 sub_population[idx2] = new_ind2;
-                // Update fitness values accordingly.
                 {
                     let key = format!("{:?}", sub_population[idx1]);
                     let new_fit = if let Some(val) = fitness_cache.get(&key) {
@@ -687,6 +707,7 @@ pub fn evolutionary_algorithm_crowding_one(
                     fitness_values[idx2] = new_fit;
                 }
 
+                // STEP 5.8: Logging - print the best fitness at specified generation intervals.
                 if gen % generation_to_print == 0 {
                     let best_fit = fitness_values
                         .iter()
@@ -697,6 +718,8 @@ pub fn evolutionary_algorithm_crowding_one(
                         island_id, gen, best_fit
                     );
                 }
+
+                // STEP 5.9: Record the current generation's best fitness.
                 fitness_history.push(
                     fitness_values
                         .iter()
@@ -705,6 +728,7 @@ pub fn evolutionary_algorithm_crowding_one(
                 );
             }
 
+            // STEP 6: Return the best solution and fitness history for this thread.
             IslandResult {
                 best_solution: {
                     let best_index = fitness_values
@@ -721,6 +745,7 @@ pub fn evolutionary_algorithm_crowding_one(
         handles.push(handle);
     }
 
+    // STEP 7: Aggregate results from all threads and determine the overall best solution.
     let mut overall_best_solution = None;
     let mut best_fitness = f64::INFINITY;
     let mut island_results = Vec::new();
@@ -734,6 +759,7 @@ pub fn evolutionary_algorithm_crowding_one(
         }
     }
 
+    // STEP 8: Plot the fitness evolution and return the best overall solution.
     plot_fitness(&island_results);
     overall_best_solution.unwrap()
 }
