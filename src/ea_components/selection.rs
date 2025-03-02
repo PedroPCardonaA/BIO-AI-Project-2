@@ -36,3 +36,29 @@ pub fn tournament_selection(
     }
     population[best_index.unwrap()].clone()
 }
+
+
+pub fn tournament_selection_index(
+    population: &Vec<Vec<Vec<usize>>>,
+    fitness: &Vec<f64>,
+    tournament_size: usize,
+) -> (usize, Vec<Vec<usize>>) {
+    let mut rng = rand::rng();
+    let pop_size = population.len();
+    let mut best_index = None;
+    for _ in 0..tournament_size {
+        let idx = rng.random_range(0..pop_size);
+        best_index = match best_index {
+            Some(current_best) => {
+                // Lower fitness is better.
+                if fitness[idx] < fitness[current_best] {
+                    Some(idx)
+                } else {
+                    Some(current_best)
+                }
+            }
+            None => Some(idx),
+        };
+    }
+    (best_index.unwrap(), population[best_index.unwrap()].clone())
+}
