@@ -651,29 +651,24 @@ pub fn select_delete_fix_crossover(
     crossover_rate: f64,
 ) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
 
-
-    // Create a random number generator.
+    // STEP 1: If the crossover rate is not met, return clones of the parents.
     let mut rng = rand::rng();
-
-    // If the crossover rate is not met, return the parents as they are.
     if rng.random::<f64>() > crossover_rate {
         return (parent1.clone(), parent2.clone());
     }
 
+    // STEP 2: Randomly select one nurse route index from each parent.
     let nurse_count = parent1.len();
-
-    // Select a random nurse route index from each parent.
     let route_idx1 = rng.random_range(0..nurse_count);
     let route_idx2 = rng.random_range(0..nurse_count);
     let selected_route_parent1 = parent1[route_idx1].clone();
     let selected_route_parent2 = parent2[route_idx2].clone();
 
-    // Create children as clones of the parents.
+    // STEP 3: Create children as clones of the parents.
     let mut child1 = parent1.clone();
     let mut child2 = parent2.clone();
 
-    // For child1, remove from every route any patient that appears in parent2's selected route.
-    // Store the removed patients so they can be reinserted.
+    // STEP 4: In child1, remove any patient that appears in parent2's selected route and store them.
     let mut missing_from_child1 = Vec::new();
     for route in child1.iter_mut() {
         let mut i = 0;
@@ -686,7 +681,7 @@ pub fn select_delete_fix_crossover(
         }
     }
 
-    // For child2, remove from every route any patient that appears in parent1's selected route.
+    // STEP 5: In child2, remove any patient that appears in parent1's selected route and store them.
     let mut missing_from_child2 = Vec::new();
     for route in child2.iter_mut() {
         let mut i = 0;
@@ -699,10 +694,10 @@ pub fn select_delete_fix_crossover(
         }
     }
 
-    // Wrap instance in an Arc for thread safety in parallel evaluations.
+    // Prepare the instance for parallel evaluations.
     let instance_arc = Arc::new(instance.clone());
 
-    // "Fix" child1: reinsert each missing patient at the best insertion (lowest overall fitness).
+    // STEP 6  - Fix child1: For each missing patient in child1, reinsert at the best position (lowest fitness) using parallel evaluation.
     for patient in missing_from_child1 {
         // Build candidate insertion positions as (route_index, insertion_position).
         let candidate_positions: Vec<(usize, usize)> = (0..child1.len())
@@ -712,7 +707,6 @@ pub fn select_delete_fix_crossover(
             })
             .collect();
 
-        // Evaluate candidates in parallel.
         let best_insertion = candidate_positions
             .par_iter()
             .map(|&(r_idx, pos)| {
@@ -729,7 +723,7 @@ pub fn select_delete_fix_crossover(
         }
     }
 
-    // "Fix" child2 by reinserting each missing patient using the fitness function.
+    // STEP 7 - Fix child2: For each missing patient in child2, reinsert at the best position using parallel evaluation.
     for patient in missing_from_child2 {
         let candidate_positions: Vec<(usize, usize)> = (0..child2.len())
             .flat_map(|r_idx| {
