@@ -629,7 +629,21 @@ pub fn route_preserving_crossover_with_random_division(
 
 
 
-
+/// Performs the select-delete-fix crossover on two parent solutions.
+/// 
+/// This function randomly selects one route from each parent, then removes from each child's routes
+/// any patients found in the selected route of the opposite parent. The removed patients are then
+/// reinserted into the child's routes at positions that yield the best fitness. If the generated
+/// random value exceeds `crossover_rate`, the function returns the parents unchanged.
+/// 
+/// # Parameters
+/// - `parent1`: The first parent's solution represented as a vector of routes.
+/// - `parent2`: The second parent's solution represented as a vector of routes.
+/// - `instance`: A reference to the problem instance.
+/// - `crossover_rate`: The probability threshold for applying the crossover.
+/// 
+/// # Returns
+/// A tuple containing two offspring solutions, each represented as a vector of routes.
 pub fn select_delete_fix_crossover(
     parent1: &Vec<Vec<usize>>,
     parent2: &Vec<Vec<usize>>,
@@ -742,35 +756,51 @@ pub fn select_delete_fix_crossover(
     (child1, child2)
 }
 
-
+/// Performs a random-route-mixing crossover between two parent solutions.
+/// 
+/// With a probability defined by `crossover_rate`, this function generates an offspring by:
+/// - Flattening the routes of one parent into a single list of patients.
+/// - Shuffling the patient list to disrupt the original route structure.
+/// - Partitioning the shuffled list into new routes based on the average route sizes derived from both parents.
+/// 
+/// If the random chance does not meet the crossover rate, the function returns a clone of `parent1`.
+/// 
+/// # Parameters
+/// - `parent1`: The first parent's solution represented as a vector of routes (each route is a vector of patient IDs).
+/// - `parent2`: The second parent's solution represented as a vector of routes.
+/// - `crossover_rate`: The probability threshold for performing the crossover.
+/// 
+/// # Returns
+/// A new solution represented as a vector of routes, ensuring that all patients appear exactly once.
 pub fn random_route_mixing_crossover(
     parent1: &Vec<Vec<usize>>, 
     parent2: &Vec<Vec<usize>>,
     crossover_rate: f64,
 ) -> Vec<Vec<usize>> {
     let mut rng = rand::rng();
-    // With probability not meeting the crossover rate, return a clone of parent1.
+
+    // STEP 1: Decide whether to perform crossover or return a clone of parent1.
     if rng.random::<f64>() > crossover_rate {
         return parent1.clone();
     }
 
-    // All patients should appear exactly once across the routes.
-    // We flatten one parent's routes (they should represent the same set as parent2).
+    // STEP 2: Flatten parent's routes into a list of all patients and shuffle it.
     let mut all_patients: Vec<usize> = parent1.iter().flatten().cloned().collect();
-    // Shuffle the list completely to break any route structure.
     all_patients.shuffle(&mut rng);
 
-    // Determine the number of nurses (routes).
+    // STEP 3: Compute new route sizes for the offspring.
+    //   3a: Determine the number of nurses (routes) and the total number of patients.
     let nurse_count = parent1.len();
     let total_patients = all_patients.len();
-
-    // Compute the average route size for each nurse from the two parents.
+    //   3b: Compute the average route size for each nurse from both parents.
     let mut avg_sizes = Vec::with_capacity(nurse_count);
     for i in 0..nurse_count {
-        // Note: if parent routes have different lengths, take the average.
         let size = (parent1[i].len() + parent2[i].len()) / 2;
         avg_sizes.push(size);
     }
+
+    //   3c: Calculate the sum of average sizes, compute proportions, and determine the number
+    //       of patients for each nurse in the offspring.
     let sum_sizes: usize = avg_sizes.iter().sum();
     // Compute proportions for each nurse.
     let proportions: Vec<f64> = avg_sizes.iter().map(|&s| s as f64 / sum_sizes as f64).collect();
@@ -786,7 +816,7 @@ pub fn random_route_mixing_crossover(
         route_sizes[0] = (route_sizes[0] as isize + diff) as usize;
     }
 
-    // Partition the shuffled patient list according to route_sizes.
+    // STEP 4: Partition the shuffled patient list into new routes according to the computed route sizes.
     let mut new_solution = Vec::with_capacity(nurse_count);
     let mut index = 0;
     for &size in &route_sizes {
@@ -798,7 +828,8 @@ pub fn random_route_mixing_crossover(
             index = total_patients;
         }
     }
-    // In case there are fewer routes than nurses, add empty routes.
+    
+    // STEP 5: Ensure the new solution has exactly `nurse_count` routes by adding empty routes if needed.
     while new_solution.len() < nurse_count {
         new_solution.push(Vec::new());
     }
@@ -806,7 +837,20 @@ pub fn random_route_mixing_crossover(
     new_solution
 }
 
-
+/// Performs a meta crossover operation between two parent solutions.
+/// 
+/// This function chooses between two crossover strategies based on a probability check:
+/// - If a generated random value is below 0.7, it uses the select-delete-fix crossover method.
+/// - Otherwise, it uses the random-route-mixing crossover method and duplicates the resulting offspring.
+/// 
+/// # Parameters
+/// - `parent1`: The first parent's solution represented as a vector of routes.
+/// - `parent2`: The second parent's solution represented as a vector of routes.
+/// - `instance`: A reference to the problem instance providing necessary context for the crossover.
+/// - `crossover_rate`: A parameter influencing the crossover probability for the chosen method.
+/// 
+/// # Returns
+/// A tuple containing two offspring solutions, each represented as a vector of routes.
 pub fn meta_crossover(
     parent1: &Vec<Vec<usize>>,
     parent2: &Vec<Vec<usize>>,
@@ -814,12 +858,15 @@ pub fn meta_crossover(
     crossover_rate: f64,
 ) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
     let mut rng = rand::rng();
+    
+    // STEP 1: Determine which alternative crossover strategy to use based on a random threshold.
     if rng.random::<f64>() < 0.7 {
-        // Use select-delete-fix crossover.
+        // ALT 1: Use the select-delete-fix crossover strategy.
         select_delete_fix_crossover(parent1, parent2, instance, crossover_rate)
     } else {
-        // Use random-route-mixing crossover and duplicate the result.
+        // ALT 2: Use the random-route-mixing crossover strategy.
         let offspring = random_route_mixing_crossover(parent1, parent2, crossover_rate);
+        // Duplicate the offspring to form a pair.
         (offspring.clone(), offspring)
     }
 }

@@ -48,7 +48,6 @@ pub struct IslandResult {
 /// # Returns
 ///
 /// Returns an `usize` value representing the computed distance between the two individuals.
-/// 
 fn distance(ind1: &Vec<Vec<usize>>, ind2: &Vec<Vec<usize>>) -> usize {
     let mut diff = 0;
     for (route1, route2) in ind1.iter().zip(ind2.iter()) {
@@ -466,7 +465,6 @@ pub fn evolutionary_algorithm_crowding(
 /// # Returns
 /// Returns the best overall solution found as a vector of routes, where each route is represented as a vector
 /// of patient IDs. Each route implicitly starts and ends at the depot, which is managed externally.
-///
 pub fn evolutionary_algorithm_crowding_one(
     instance: &Instance,
     population_size: usize,
