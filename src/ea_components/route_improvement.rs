@@ -4,69 +4,113 @@ use rand::Rng;
 use crate::ea_components::fitness::fitness;
 use crate::structs::instance::Instance;
 
+// =============== MAIN WRAPPER FUNCTION ===============
 pub fn route_improvement(
     instance: &Instance,
     offspring: &mut Vec<Vec<usize>>,
     cache: &DashMap<String, f64>,
 ) {
     loop {
-        let n_routes = offspring.len();
-        if n_routes == 0 {
+        let improved_intra = intra_route_improvement_pass(instance, offspring, cache);
+        let improved_inter = inter_route_improvement_pass(instance, offspring, cache);
+
+        // If neither pass found any improvement, we're done.
+        if !improved_intra && !improved_inter {
             break;
         }
-        // Compute total possible pairs (r_i, r_j) with r_i ≤ r_j.
-        let total_pairs = n_routes * (n_routes + 1) / 2;
-        // Sample 1% of these pairs (at least one pair).
-        let sample_size = std::cmp::max(1, ((total_pairs as f64) * 0.01).ceil() as usize);
-        let mut rng = rand::thread_rng();
-        let sample: Vec<(usize, usize)> = (0..sample_size)
-            .map(|_| {
-                let r_i = rng.gen_range(0..n_routes);
-                // Ensure r_j is in [r_i, n_routes)
-                let r_j = rng.gen_range(r_i..n_routes);
-                (r_i, r_j)
-            })
-            .collect();
+    }
+}
 
-        // In parallel, try to find any improvement candidate among the sampled pairs.
-        let candidate = sample.par_iter().find_map_any(|&(r_i, r_j)| {
-            // If both routes are too short, skip.
-            if offspring[r_i].len() < 3 || offspring[r_j].len() < 3 {
-                return None;
-            }
-            
-            if r_i == r_j {
-                // ============= Intra-route improvements ============= //
-                // 1) 2-Opt
-                if let Some(new_offspring) = try_2opt_intra_route(r_i, offspring, instance, cache) {
-                    return Some(new_offspring);
-                }
-                // 2) Or-Opt (small chain removal)
-                if let Some(new_offspring) = try_or_opt_intra_route(r_i, offspring, instance, cache) {
-                    return Some(new_offspring);
-                }
-                // (You could add 3‐Opt, etc. here as well)
-            } else {
-                // ============= Inter-route improvements ============= //
-                // 1) Relocation
-                if let Some(new_offspring) = try_all_relocations(r_i, r_j, offspring, instance, cache) {
-                    return Some(new_offspring);
-                }
-                // 2) Swap
-                if let Some(new_offspring) = try_all_swaps(r_i, r_j, offspring, instance, cache) {
-                    return Some(new_offspring);
-                }
-            }
-            None
-        });
+// =============== PASS #1: INTRA-ROUTE IMPROVEMENT ===============
+fn intra_route_improvement_pass(
+    instance: &Instance,
+    offspring: &mut Vec<Vec<usize>>,
+    cache: &DashMap<String, f64>,
+) -> bool {
+    let n_routes = offspring.len();
+    if n_routes == 0 {
+        return false;
+    }
 
-        // If an improvement candidate was found, update offspring and repeat;
-        // otherwise, break the loop.
-        if let Some(new_offspring) = candidate {
-            *offspring = new_offspring;
-        } else {
-            break;
+    // Sample only route pairs where r_i == r_j
+    let mut rng = rand::thread_rng();
+    let sample_size = std::cmp::max(1, (n_routes as f64 * 0.05).ceil() as usize); // e.g., sample 5% of routes
+    let routes: Vec<usize> = (0..sample_size)
+        .map(|_| rng.gen_range(0..n_routes))
+        .collect();
+
+    // We'll store the first improvement we find (if any).
+    let candidate = routes.par_iter().find_map_any(|&r_i| {
+        // Must have at least 3 nodes to do 2-Opt, Or-Opt, etc.
+        if offspring[r_i].len() < 3 {
+            return None;
         }
+        // 1) 2-Opt
+        if let Some(new_offspring) = try_2opt_intra_route(r_i, offspring, instance, cache) {
+            return Some(new_offspring);
+        }
+        // 2) Or-Opt
+        if let Some(new_offspring) = try_or_opt_intra_route(r_i, offspring, instance, cache) {
+            return Some(new_offspring);
+        }
+        None
+    });
+
+    if let Some(new_offspring) = candidate {
+        *offspring = new_offspring;
+        true
+    } else {
+        false
+    }
+}
+
+// =============== PASS #2: INTER-ROUTE IMPROVEMENT ===============
+fn inter_route_improvement_pass(
+    instance: &Instance,
+    offspring: &mut Vec<Vec<usize>>,
+    cache: &DashMap<String, f64>,
+) -> bool {
+    let n_routes = offspring.len();
+    if n_routes < 2 {
+        return false;
+    }
+
+    // We'll create a random sample of route pairs where r_i != r_j
+    let mut rng = rand::thread_rng();
+    let sample_size = std::cmp::max(1, (n_routes as f64 * 0.01).ceil() as usize); // e.g., sample 2% pairs
+    let pairs: Vec<(usize, usize)> = (0..sample_size)
+        .map(|_| {
+            let r_i = rng.gen_range(0..n_routes);
+            let mut r_j = rng.gen_range(0..n_routes);
+            // ensure r_j != r_i
+            while r_j == r_i {
+                r_j = rng.gen_range(0..n_routes);
+            }
+            (r_i, r_j)
+        })
+        .collect();
+
+    let candidate = pairs.par_iter().find_map_any(|&(r_i, r_j)| {
+        // Check route lengths
+        if offspring[r_i].len() < 3 || offspring[r_j].len() < 3 {
+            return None;
+        }
+        // 1) Relocation
+        if let Some(new_offspring) = try_all_relocations(r_i, r_j, offspring, instance, cache) {
+            return Some(new_offspring);
+        }
+        // 2) Swap
+        if let Some(new_offspring) = try_all_swaps(r_i, r_j, offspring, instance, cache) {
+            return Some(new_offspring);
+        }
+        None
+    });
+
+    if let Some(new_offspring) = candidate {
+        *offspring = new_offspring;
+        true
+    } else {
+        false
     }
 }
 
