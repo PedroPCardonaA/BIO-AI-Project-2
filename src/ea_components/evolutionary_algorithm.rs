@@ -17,12 +17,38 @@ use super::{
     route_improvement::route_improvement,
 };
 
+/// Represents the outcome of the evolutionary process on an island.
+///
+/// This structure holds the best solution found by the island's evolutionary algorithm
+/// and records the corresponding fitness values over the generations.
+/// 
+/// - `best_solution`: The best solution discovered, represented as a vector of routes, where each route is a vector of patient IDs.
+/// - `fitness_history`: A record of the best fitness value per generation during the evolution.
 pub struct IslandResult {
     pub best_solution: Vec<Vec<usize>>,
     pub fitness_history: Vec<f64>,
 }
 
-/// Helper function to compute the distance between two individuals.
+/// Computes a distance metric between two individuals by comparing their respective routes.
+///
+/// Each individual is represented as a vector of routes where each inner vector
+/// denotes a route as a sequence of patients' identifiers. The function calculates the distance by:
+/// - Iterating over paired routes from both individuals.
+/// - Counting the number of mismatched elements in the corresponding positions.
+/// - Adding the difference in lengths of the routes to account for any extra elements.
+/// - Incorporating differences if the individuals have a different number of routes.
+///
+/// This metric is used in the crowding replacement process to assess the similarity between solutions.
+///
+/// # Arguments
+///
+/// * `ind1` - A reference to the first individual's set of routes.
+/// * `ind2` - A reference to the second individual's set of routes.
+///
+/// # Returns
+///
+/// Returns an `usize` value representing the computed distance between the two individuals.
+/// 
 fn distance(ind1: &Vec<Vec<usize>>, ind2: &Vec<Vec<usize>>) -> usize {
     let mut diff = 0;
     for (route1, route2) in ind1.iter().zip(ind2.iter()) {
@@ -452,7 +478,7 @@ pub fn evolutionary_algorithm_crowding_one(
     num_islands: usize,
     migration_interval: usize,
 ) -> Vec<Vec<usize>> {
-    
+
     // STEP 1: Initialize shared parameters and resources.
     let sub_population_size = population_size / num_islands;
     let instance_arc = Arc::new(instance.clone());
