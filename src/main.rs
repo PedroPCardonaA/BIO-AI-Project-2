@@ -13,8 +13,6 @@ mod utils;
 mod ea_components;
 
 fn main() {
- 
-
     let instance = utils::parse_data::parse_data("src/data/train/train_2.json");
     
     let start_time = Instant::now();

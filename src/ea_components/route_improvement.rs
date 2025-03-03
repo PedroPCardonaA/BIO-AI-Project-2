@@ -33,10 +33,10 @@ fn intra_route_improvement_pass(
     }
 
     // Sample only route pairs where r_i == r_j
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let sample_size = std::cmp::max(1, (n_routes as f64 * 0.05).ceil() as usize); // e.g., sample 5% of routes
     let routes: Vec<usize> = (0..sample_size)
-        .map(|_| rng.gen_range(0..n_routes))
+        .map(|_| rng.random_range(0..n_routes))
         .collect();
 
     // We'll store the first improvement we find (if any).
@@ -75,16 +75,16 @@ fn inter_route_improvement_pass(
         return false;
     }
 
-    // We'll create a random sample of route pairs where r_i != r_j
-    let mut rng = rand::thread_rng();
+    // Create a random sample of route pairs where r_i != r_j 
+    let mut rng = rand::rng();
     let sample_size = std::cmp::max(1, (n_routes as f64 * 0.01).ceil() as usize); // e.g., sample 2% pairs
     let pairs: Vec<(usize, usize)> = (0..sample_size)
         .map(|_| {
-            let r_i = rng.gen_range(0..n_routes);
-            let mut r_j = rng.gen_range(0..n_routes);
+            let r_i = rng.random_range(0..n_routes);
+            let mut r_j = rng.random_range(0..n_routes);
             // ensure r_j != r_i
             while r_j == r_i {
-                r_j = rng.gen_range(0..n_routes);
+                r_j = rng.random_range(0..n_routes);
             }
             (r_i, r_j)
         })

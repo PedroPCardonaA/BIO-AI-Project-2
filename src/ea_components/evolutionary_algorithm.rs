@@ -347,19 +347,19 @@ pub fn evolutionary_algorithm_crowding(
 
                     let pairing1 = distance(&parent1, &child1) + distance(&parent2, &child2);
                     let pairing2 = distance(&parent1, &child2) + distance(&parent2, &child1);
-                    let mut rng = rand::thread_rng();
+                    let mut rng = rand::rng();
                     if pairing1 <= pairing2 {
                         let winner1 = if theta > 0.0 {
                             let diff = get_fitness(&child1) - get_fitness(&parent1);
                             let p = 1.0 / (1.0 + (diff / theta).exp());
-                            if rng.gen::<f64>() < p { child1 } else { parent1 }
+                            if rng.random::<f64>() < p { child1 } else { parent1 }
                         } else {
                             if get_fitness(&child1) < get_fitness(&parent1) { child1 } else { parent1 }
                         };
                         let winner2 = if theta > 0.0 {
                             let diff = get_fitness(&child2) - get_fitness(&parent2);
                             let p = 1.0 / (1.0 + (diff / theta).exp());
-                            if rng.gen::<f64>() < p { child2 } else { parent2 }
+                            if rng.random::<f64>() < p { child2 } else { parent2 }
                         } else {
                             if get_fitness(&child2) < get_fitness(&parent2) { child2 } else { parent2 }
                         };
@@ -371,14 +371,14 @@ pub fn evolutionary_algorithm_crowding(
                         let winner1 = if theta > 0.0 {
                             let diff = get_fitness(&child2) - get_fitness(&parent1);
                             let p = 1.0 / (1.0 + (diff / theta).exp());
-                            if rng.gen::<f64>() < p { child2 } else { parent1 }
+                            if rng.random::<f64>() < p { child2 } else { parent1 }
                         } else {
                             if get_fitness(&child2) < get_fitness(&parent1) { child2 } else { parent1 }
                         };
                         let winner2 = if theta > 0.0 {
                             let diff = get_fitness(&child1) - get_fitness(&parent2);
                             let p = 1.0 / (1.0 + (diff / theta).exp());
-                            if rng.gen::<f64>() < p { child1 } else { parent2 }
+                            if rng.random::<f64>() < p { child1 } else { parent2 }
                         } else {
                             if get_fitness(&child1) < get_fitness(&parent2) { child1 } else { parent2 }
                         };
@@ -637,7 +637,7 @@ pub fn evolutionary_algorithm_crowding_one(
                 // STEP 5.6: Crowding Replacement - determine which individuals to retain.
                 let pairing1 = distance(&parent1, &child1) + distance(&parent2, &child2);
                 let pairing2 = distance(&parent1, &child2) + distance(&parent2, &child1);
-                let mut rng = rand::thread_rng();
+                let mut rng = rand::rng();
 
                 let new_ind1;
                 let new_ind2;
@@ -645,7 +645,7 @@ pub fn evolutionary_algorithm_crowding_one(
                     new_ind1 = if theta > 0.0 {
                         let diff = get_fitness(&child1) - get_fitness(&parent1);
                         let p = 1.0 / (1.0 + (diff / theta).exp());
-                        if rng.gen::<f64>() < p {
+                        if rng.random::<f64>() < p {
                             child1
                         } else {
                             parent1
@@ -660,7 +660,7 @@ pub fn evolutionary_algorithm_crowding_one(
                     new_ind2 = if theta > 0.0 {
                         let diff = get_fitness(&child2) - get_fitness(&parent2);
                         let p = 1.0 / (1.0 + (diff / theta).exp());
-                        if rng.gen::<f64>() < p {
+                        if rng.random::<f64>() < p {
                             child2
                         } else {
                             parent2
@@ -676,7 +676,7 @@ pub fn evolutionary_algorithm_crowding_one(
                     new_ind1 = if theta > 0.0 {
                         let diff = get_fitness(&child2) - get_fitness(&parent1);
                         let p = 1.0 / (1.0 + (diff / theta).exp());
-                        if rng.gen::<f64>() < p {
+                        if rng.random::<f64>() < p {
                             child2
                         } else {
                             parent1
@@ -691,7 +691,7 @@ pub fn evolutionary_algorithm_crowding_one(
                     new_ind2 = if theta > 0.0 {
                         let diff = get_fitness(&child1) - get_fitness(&parent2);
                         let p = 1.0 / (1.0 + (diff / theta).exp());
-                        if rng.gen::<f64>() < p {
+                        if rng.random::<f64>() < p {
                             child1
                         } else {
                             parent2
