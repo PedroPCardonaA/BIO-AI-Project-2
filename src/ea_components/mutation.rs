@@ -4,9 +4,11 @@ use super::fitness::fitness;
 use rayon::prelude::*;
 use std::cmp::Ordering;
 
-/// Local Search Improvement operator.
-/// For each route (nurse), with probability `mutation_rate`, a patient is
-/// removed and reinserted in a location that improves the overall fitness.
+/// Local Search Improvement Mutation operator.
+/// 
+/// For each nurse route in the individual, with probability `mutation_rate`, a patient is removed
+/// and reinserted at the position that minimizes the overall solution fitness. Candidate insertion
+/// positions are evaluated in parallel to select the move that best improves the solution.
 pub fn mutation_local_search(
     individual: &mut Vec<Vec<usize>>,
     mutation_rate: f64,
@@ -60,7 +62,9 @@ pub fn mutation_local_search(
 }
 
 /// Swap Mutation operator.
-/// Randomly selects two distinct routes (nurses) and swaps one patient from each.
+/// 
+/// Randomly selects two distinct nurse routes and exchanges one patient from each route.
+/// This operator introduces diversity by swapping the positions of patients between routes.
 pub fn mutation_swap(individual: &mut Vec<Vec<usize>>) {
     let mut rng = rand::rng();
     let num_nurses = individual.len();
@@ -95,7 +99,10 @@ pub fn mutation_swap(individual: &mut Vec<Vec<usize>>) {
 }
 
 /// Insert Mutation operator.
-/// Removes a patient from one route and reinserts it into a random route (or the same route) at a random position.
+/// 
+/// Removes a patient from one nurse route and reinserts it into a randomly selected route
+/// at a random position. This operator alters the route configuration while preserving the overall
+/// set of patients.
 pub fn mutation_insert(individual: &mut Vec<Vec<usize>>) {
     let mut rng = rand::rng();
     let num_nurses = individual.len();
@@ -115,7 +122,9 @@ pub fn mutation_insert(individual: &mut Vec<Vec<usize>>) {
 }
 
 /// Scramble Mutation operator.
-/// Randomly shuffles a contiguous subsequence within one route.
+/// 
+/// Randomly shuffles a contiguous subsequence within a single nurse route,
+/// thereby disrupting the current ordering and promoting exploration of new route configurations.
 pub fn mutation_scramble(individual: &mut Vec<Vec<usize>>) {
     let mut rng = rand::rng();
     let num_nurses = individual.len();
@@ -134,7 +143,9 @@ pub fn mutation_scramble(individual: &mut Vec<Vec<usize>>) {
 }
 
 /// Inversion Mutation operator.
-/// Reverses a contiguous subsequence within one route.
+/// 
+/// Reverses a contiguous subsequence within a single nurse route, effectively reordering
+/// that segment. This operator can lead to improved sequencing by exploring alternate orderings.
 pub fn mutation_inversion(individual: &mut Vec<Vec<usize>>) {
     let mut rng = rand::rng();
     let num_nurses = individual.len();
@@ -152,9 +163,11 @@ pub fn mutation_inversion(individual: &mut Vec<Vec<usize>>) {
     individual[nurse][start..=end].reverse();
 }
 
-/// Meta mutation operator.
-/// With probability `mutation_rate`, randomly chooses one of the mutation operators
-/// (local search improvement, swap, insert, scramble, inversion) and applies it.
+/// Meta Mutation operator.
+/// 
+/// With probability `mutation_rate`, randomly selects one of the available mutation operators
+/// (local search, swap, insert, scramble, inversion) and applies it to the individual. This operator
+/// serves to introduce variation and enhance the exploration of the solution space.
 pub fn meta_mutation(
     individual: &mut Vec<Vec<usize>>,
     mutation_rate: f64,
