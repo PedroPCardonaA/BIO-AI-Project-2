@@ -4,13 +4,18 @@ use std::io::{Write, BufWriter};
 
 /// Saves a textual representation of the solution to a file.
 /// 
-/// The textual representation includes the instance name, the number of nurses, the nurse capacity, the depot return time,
-/// the routes for each nurse, the benchmark objective value, and the total duration of the solution.
+/// This function writes a plain text summary of the solution to the specified file path. The summary includes:
+/// - The instance details such as instance name, number of nurses, nurse capacity, and depot return time.
+/// - For each nurse, the route information including travel time, covered demand, and the sequence of visited patients.
+/// - The benchmark objective value and the computed total duration of the solution.
 /// 
-/// # Arguments
-/// * `path` - The path to the file where the solution will be saved.
-/// * `solution` - A vector of vectors, where each inner vector represents the route of a nurse.
-/// * `instance` - The instance for which the solution was computed.
+/// # Parameters:
+/// - `path`: A string slice that specifies the file path where the solution will be saved.
+/// - `solution`: A reference to the solution, represented as a vector of routes (each route is a vector of patient IDs).
+/// - `instance`: A reference to the instance for which the solution was computed, containing all necessary configuration data.
+/// 
+/// # Returns:
+/// This function returns `()` on success; it will panic if an error occurs during file creation or writing.
 pub fn save_textual_solution_to_file(path: &str, solution: &Vec<Vec<usize>>, instance: &Instance) {
     let file = File::create(path).expect("Unable to create file");
     let mut writer = BufWriter::new(file);

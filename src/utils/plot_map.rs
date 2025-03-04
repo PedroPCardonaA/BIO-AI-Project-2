@@ -3,6 +3,20 @@ use std::{collections::HashMap, f64::consts::PI};
 
 use crate::structs::{depot::Depot, patient::Patient};
 
+/// Plots the nurse routing solution on a map and saves it as a PNG image.
+/// 
+/// This function generates a visual representation of the solution by plotting the depot, patient locations,
+/// and nurse routes. The patient coordinates are scaled relative to the depot using a scale factor.
+/// Unique colors are generated for each nurse route via an HSL-to-RGB conversion, and arrows are drawn along
+/// the routes to indicate direction. A legend is added to identify each nurse's route.
+/// 
+/// # Parameters
+/// - `solution`: A reference to the solution, represented as a vector of routes (each route is a vector of patient IDs).
+/// - `patients`: A reference to a HashMap mapping patient IDs (as strings) to their corresponding `Patient` structs.
+/// - `depot`: A reference to the `Depot` struct containing the depot's coordinates and return time.
+/// 
+/// # Remarks
+/// The generated map is saved as "output/solution.png".
 pub fn plot_map(solution: &Vec<Vec<usize>>, patients: &HashMap<String, Patient>, depot: &Depot) {
     let output_path = "output/solution.png";
     let root = BitMapBackend::new(output_path, (900, 900)).into_drawing_area();
@@ -110,7 +124,15 @@ pub fn plot_map(solution: &Vec<Vec<usize>>, patients: &HashMap<String, Patient>,
     println!("Solution diagram saved as {}", output_path);
 }
 
-/// Convert HSL to RGB.
+/// Converts a color from HSL (Hue, Saturation, Lightness) to RGB (Red, Green, Blue).
+/// 
+/// # Parameters
+/// - `h`: The hue angle in degrees.
+/// - `s`: The saturation component (0.0 to 1.0).
+/// - `l`: The lightness component (0.0 to 1.0).
+/// 
+/// # Returns
+/// A tuple `(r, g, b)` where each component is an 8-bit unsigned integer representing the corresponding RGB value.
 fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
     let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
     let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
@@ -130,7 +152,16 @@ fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
     )
 }
 
-/// Draw a small arrow at the end of a route segment.
+/// Draws a small arrow at the end of a route segment to indicate direction.
+/// 
+/// This function draws two short line segments forming an arrowhead at the specified end point of a route segment.
+/// The arrow is oriented based on the provided angle, and its size is defined internally.
+/// 
+/// # Parameters
+/// - `chart`: A mutable reference to the chart context used for drawing.
+/// - `end`: A tuple `(f64, f64)` representing the end point of the route segment.
+/// - `angle`: The angle (in degrees) of the route segment, used to orient the arrow.
+/// - `color`: A reference to an `RGBColor` specifying the color of the arrow.
 fn draw_arrow(
     chart: &mut ChartContext<BitMapBackend, Cartesian2d<RangedCoordf64, RangedCoordf64>>,
     end: (f64, f64),
