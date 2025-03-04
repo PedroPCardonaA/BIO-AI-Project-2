@@ -6,7 +6,7 @@ use utils::{
     plot_map::plot_map_with_path, 
     textual_answer::save_textual_solution_to_file, 
     create_file::save_solution_to_file, 
-    score_recorder::run_all_trains
+    score_recorder::run_trains_range
 };
 mod structs;
 mod utils;
@@ -26,6 +26,7 @@ mod ea_components;
 /// Optionally, commented-out code is provided to run the evolutionary algorithm on multiple training instances
 /// and iteratively update a scoreboard.
 fn main() {
+    /*
     let instance = utils::parse_data::parse_data("src/data/train/train_2.json");
     
     let start_time = Instant::now();
@@ -56,18 +57,32 @@ fn main() {
     let _ = save_solution_to_file(&best_solution, "output/solution.json");
     // Run all training instances using the crowding algorithm.
     //TODO: Uncomment this line to run all training instances
-    /*
-    run_all_trains( 
-        evolutionary_algorithm_crowding_one,
-        30,
-            50000,
-            5,
-            0.2,
-            1.2,
-            2000,
-            1,
-            10000,
-    );
+    
     */
-}
+    let benchmarks = vec![
+        //("train_0", 827.0),
+        //("train_1", 589.0),
+        ("train_2", 1258.0),
+        //("train_3", 1132.0),
+        //("train_4", 1261.0),
+        //("train_5", 1092.0),
+        //("train_6", 924.0),
+        //("train_7", 870.0),
+        //("train_8", 731.0),
+        //("train_9", 855.0),
+    ];
 
+    // Run the evolutionary algorithm on the specified benchmarks.
+    run_trains_range(
+        evolutionary_algorithm_crowding_one, 
+        benchmarks,                                           // benchmark range of instances
+        30,                                  // population_size
+        5000,                                   // generations
+        5,                                   // tournament_size
+        0.2,                            // mutation_probability
+        1.2,                                          // lambda
+        2000,                            // generation_to_print
+        1,                                       // num_islands
+        10000                             // migration_interval
+    );
+}
