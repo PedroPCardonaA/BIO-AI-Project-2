@@ -4,7 +4,7 @@ use rand::Rng;
 ///
 /// # Arguments
 ///
-/// * `population` - A reference to the population (each individual is a Vec<Vec<usize>>).
+/// * `population` - A reference to the population (each individual is a `Vec<Vec<usize>>`).
 /// * `fitness` - A reference to a vector of fitness values corresponding to each individual.
 ///               Lower fitness is considered better.
 /// * `tournament_size` - The number of individuals in each tournament.
