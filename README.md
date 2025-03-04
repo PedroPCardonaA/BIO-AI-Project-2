@@ -3,20 +3,19 @@
 This project implements a **Steady-State Memetic Genetic Algorithm** to solve a constrained version of the **Vehicle Routing Problem** (VRP). The objective is to optimize **nurse scheduling** by minimizing total travel time while considering constraints like time windows, workload capacity, and specified depot return times. By combining **steady-state evolution** with **local search heuristics**, the algorithm enhances route optimization efficiency.  
 
 ## 🚀 Running the Project
-This project requires no additional setup and is ready to run out of the box. To execute the program, use:
+
+No additional setup is needed—the project is ready to run out of the box. You can adjust model parameters and datasets in `main.rs` if required. To execute the program, run:
 
 ```sh
 cargo run --release
 ```
 
-Model parameters and datasets can be adjusted in `main.rs` as needed.
+This command compiles and runs the algorithm. When finished, an output file is generated that includes:
+- A fitness plot,
+- The final solution in JSON and TXT formats,
+- A visual overview of the solution's routes.
 
-## 🧠 Algorithm Overview 
-The Genetic Algorithm follows these key steps:  
-
-![Algorithm Overview](src/assets/ssmga.png "Overview of how the algorithm works")  
-
-After termination, runtime statistics and the final solution score will be written to the output file.
+Refer to `solution.txt` for the final solution cost, which is used for the project grading.
 
 ## 📖 Documentation 
 
@@ -26,6 +25,13 @@ This project uses **rustdoc** for automatic documentation. To generate and open 
 cargo doc --open
 ``` 
 Your documentation will then be generated and automatically open on your preferred browser.
+
+## 🧠 Algorithm Overview 
+The Genetic Algorithm follows these key steps:  
+
+![Algorithm Overview](src/assets/ssmga.png "Overview of how the algorithm works")  
+
+After termination, runtime statistics and the final solution score will be written to the output file.
 
 ## 📂 Project Structure  
 The project is **modular**, with components categorized as **Genetic Algorithm modules, Structs, and Utilities**
