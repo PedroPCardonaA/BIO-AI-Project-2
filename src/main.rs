@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use ea_components::evolutionary_algorithm::evolutionary_algorithm_crowding_one;
 use utils::{
-    plot_map::plot_map, 
+    plot_map::plot_map_with_path, 
     textual_answer::save_textual_solution_to_file, 
     create_file::save_solution_to_file, 
     score_recorder::run_all_trains
@@ -50,13 +50,13 @@ fn main() {
     // Prints the elapsed time with 4 digits after the decimal point.
     println!("Evolutionary algorithm training completed in: {:.4} seconds", secs);
 
-    plot_map(&best_solution, &instance.patients, &instance.depot);
+    plot_map_with_path(&best_solution, &instance.patients, &instance.depot, "output/solution.png");
     save_textual_solution_to_file("output/solution.txt", &best_solution, &instance);
 
     let _ = save_solution_to_file(&best_solution, "output/solution.json");
-    /* 
     // Run all training instances using the crowding algorithm.
     //TODO: Uncomment this line to run all training instances
+    /*
     run_all_trains( 
         evolutionary_algorithm_crowding_one,
         30,
@@ -66,8 +66,8 @@ fn main() {
             1.2,
             2000,
             1,
-            10000,   // migration_interval
+            10000,
     );
-*/
+    */
 }
 

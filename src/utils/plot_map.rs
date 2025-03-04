@@ -3,35 +3,38 @@ use std::{collections::HashMap, f64::consts::PI};
 
 use crate::structs::{depot::Depot, patient::Patient};
 
-/// Plots the nurse routing solution on a map and saves it as a PNG image.
+/// Plots the nurse routing solution on a map and saves it as a PNG image to the specified output path.
 /// 
 /// This function generates a visual representation of the solution by plotting the depot, patient locations,
-/// and nurse routes. The patient coordinates are scaled relative to the depot using a scale factor.
-/// Unique colors are generated for each nurse route via an HSL-to-RGB conversion, and arrows are drawn along
-/// the routes to indicate direction. A legend is added to identify each nurse's route.
+/// and nurse routes. Patient coordinates are scaled relative to the depot using a scale factor. Unique colors
+/// are generated for each nurse route via an HSL-to-RGB conversion, and arrows are drawn along the routes
+/// to indicate direction. A legend is added to identify each nurse's route.
 /// 
-/// # Parameters
+/// # Parameters:
 /// - `solution`: A reference to the solution, represented as a vector of routes (each route is a vector of patient IDs).
 /// - `patients`: A reference to a HashMap mapping patient IDs (as strings) to their corresponding `Patient` structs.
 /// - `depot`: A reference to the `Depot` struct containing the depot's coordinates and return time.
-/// 
-/// # Remarks
-/// The generated map is saved as "output/solution.png".
-pub fn plot_map(solution: &Vec<Vec<usize>>, patients: &HashMap<String, Patient>, depot: &Depot) {
-    let output_path = "output/solution.png";
+/// - `output_path`: The file path where the PNG image will be saved.
+pub fn plot_map_with_path(
+    solution: &Vec<Vec<usize>>,
+    patients: &HashMap<String, Patient>,
+    depot: &Depot,
+    output_path: &str,
+) {
     let root = BitMapBackend::new(output_path, (900, 900)).into_drawing_area();
     root.fill(&WHITE).unwrap();
 
-    // Scale factor for the distances.
     let scale_factor = 1.5;
 
-    // Helper function: scales a point relative to the depot.
-    fn scale_point(x: f64, y: f64, depot: &Depot, factor: f64) -> (f64, f64) {
-        (depot.x_coord + (x - depot.x_coord) * factor,
-         depot.y_coord + (y - depot.y_coord) * factor)
+    // Helper function to scale coordinates relative to the depot.
+    fn scale_point(x: f64, y: f64, depot: &crate::structs::depot::Depot, factor: f64) -> (f64, f64) {
+        (
+            depot.x_coord + (x - depot.x_coord) * factor,
+            depot.y_coord + (y - depot.y_coord) * factor,
+        )
     }
 
-    // Compute scaled bounds for the chart.
+    // Compute the scaled bounds for the chart.
     let (scaled_depot_x, scaled_depot_y) = (depot.x_coord, depot.y_coord);
     let mut min_x = scaled_depot_x;
     let mut max_x = scaled_depot_x;
@@ -45,6 +48,7 @@ pub fn plot_map(solution: &Vec<Vec<usize>>, patients: &HashMap<String, Patient>,
         if scaled_y > max_y { max_y = scaled_y; }
     }
 
+    // Build and configure the chart.
     let mut chart = ChartBuilder::on(&root)
         .caption("Nurse Routing Solution", ("sans-serif", 30))
         .margin(15)
@@ -52,10 +56,9 @@ pub fn plot_map(solution: &Vec<Vec<usize>>, patients: &HashMap<String, Patient>,
         .y_label_area_size(40)
         .build_cartesian_2d(min_x..max_x, min_y..max_y)
         .unwrap();
-
     chart.configure_mesh().draw().unwrap();
 
-    // Generate unique colors for each nurse using HSL color space.
+    // Generate unique colors for each nurse route using the HSL color space.
     let num_nurses = solution.len();
     let colors: Vec<RGBColor> = (0..num_nurses)
         .map(|i| {
@@ -71,11 +74,10 @@ pub fn plot_map(solution: &Vec<Vec<usize>>, patients: &HashMap<String, Patient>,
         .draw_series(std::iter::once(Circle::new(depot_point, 5, BLACK.filled())))
         .unwrap();
 
-    // For each nurse, draw its route.
+    // Draw each nurse's route.
     for (nurse_id, route) in solution.iter().enumerate() {
         let color = colors[nurse_id];
-
-        // Build the path: start at the depot, then visit each patient (scaled), and return to the depot.
+        // Build the route path: start at the depot, visit each patient, and return to the depot.
         let mut path_points = vec![depot_point];
         for patient_id in route {
             if let Some(patient) = patients.get(&patient_id.to_string()) {
@@ -90,7 +92,7 @@ pub fn plot_map(solution: &Vec<Vec<usize>>, patients: &HashMap<String, Patient>,
             .draw_series(LineSeries::new(path_points.iter().copied(), &color))
             .unwrap();
 
-        // Draw arrows along the route.
+        // Draw arrows along the route to indicate direction.
         for window in path_points.windows(2) {
             if let [start, end] = *window {
                 let angle = ((end.1 - start.1).atan2(end.0 - start.0)).to_degrees();
@@ -98,8 +100,7 @@ pub fn plot_map(solution: &Vec<Vec<usize>>, patients: &HashMap<String, Patient>,
             }
         }
 
-        // Draw patient markers with a smaller radius.
-        // Skip the first and last points (which are the depot) when drawing patient markers.
+        // Draw patient markers (skipping the depot points).
         for &point in path_points.iter().skip(1).take(path_points.len() - 2) {
             chart
                 .draw_series(std::iter::once(Circle::new(point, 3, color.filled())))
@@ -107,7 +108,6 @@ pub fn plot_map(solution: &Vec<Vec<usize>>, patients: &HashMap<String, Patient>,
         }
     }
 
-    // Draw a legend in the top-right corner.
     let legend_x = max_x - (max_x - min_x) * 0.2;
     let legend_y = max_y - (max_y - min_y) * 0.05;
     for (i, color) in colors.iter().enumerate() {
@@ -119,7 +119,6 @@ pub fn plot_map(solution: &Vec<Vec<usize>>, patients: &HashMap<String, Patient>,
         )))
         .unwrap();
     }
-
     root.present().unwrap();
     println!("Solution diagram saved as {}", output_path);
 }
