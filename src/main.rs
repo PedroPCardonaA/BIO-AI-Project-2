@@ -1,7 +1,7 @@
 
 use std::time::Instant;
 
-use ea_components::evolutionary_algorithm::{evolutionary_algorithm, evolutionary_algorithm_crowding, evolutionary_algorithm_crowding_one};
+use ea_components::evolutionary_algorithm::evolutionary_algorithm_crowding_one;
 use utils::{
     plot_map::plot_map, 
     textual_answer::save_textual_solution_to_file, 
