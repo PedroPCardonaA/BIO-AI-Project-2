@@ -55,17 +55,4 @@ impl Nurse {
     pub fn set_current_load(&mut self, current_load: u32) {
         self.current_load = current_load;
     }
-
-    /// Returns the current travel time of the nurse.
-    pub fn get_current_travel_time(&self) -> f64 {
-        self.current_travel_time
-    }
-
-    /// Sets the current travel time of the nurse.
-    ///
-    /// # Parameters
-    /// - `current_travel_time`: The new travel time value.
-    pub fn set_current_travel_time(&mut self, current_travel_time: f64) {
-        self.current_travel_time = current_travel_time;
-    }
 }

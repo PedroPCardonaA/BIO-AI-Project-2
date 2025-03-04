@@ -20,7 +20,7 @@ pub fn save_solution_to_file(instance: &Vec<Vec<usize>>, file_path: &str) -> std
 
 /// Saves any serializable data to a file in pretty-printed JSON format.
 ///
-/// # Arguments
+/// # Parameters
 ///
 /// * `data` - A reference to the data to be saved. It must implement the `Serialize` trait.
 /// * `file_path` - The path where the JSON representation of the data will be written.
