@@ -7,6 +7,17 @@ use crate::utils::parse_data::parse_data;
 use crate::structs::instance::Instance;
 
 /// Represents the score for one training instance.
+/// 
+/// This struct stores scoring information for a single training instance, including the instance name,
+/// benchmark objective value, computed objective value, assigned score based on the difference between the two,
+/// and the percentage difference from the benchmark.
+/// 
+/// # Fields
+/// - `instance_name`: The name of the instance (e.g., "train_0").
+/// - `benchmark`: The benchmark objective value for the instance.
+/// - `objective_value`: The objective value (total duration) computed by the solution.
+/// - `score`: The score assigned based on the difference between the computed value and the benchmark.
+/// - `percent_difference`: The percentage difference between the computed objective value and the benchmark.
 #[derive(Serialize, Clone)]
 struct ScoreEntry {
     /// The name of the instance (e.g., "train_0").
@@ -21,7 +32,16 @@ struct ScoreEntry {
     percent_difference: f64,
 }
 
-/// Represents the overall scoreboard.
+/// Represents the overall scoreboard for multiple training instances.
+/// 
+/// This struct aggregates the scoring data for all processed training instances, providing a list of
+/// individual score entries along with summary metrics such as the average score, total score, and the maximum possible score.
+/// 
+/// # Fields
+/// - `scores`: A vector of individual instance score entries.
+/// - `average_score`: The average score over all processed instances.
+/// - `total_score`: The sum of scores for all instances.
+/// - `max_possible_score`: The maximum possible score (e.g., if all instances achieved full score).
 #[derive(Serialize)]
 struct ScoreBoard {
     /// A list of individual instance score entries.
@@ -36,23 +56,21 @@ struct ScoreBoard {
 
 /// Runs the provided evolutionary algorithm on each train_x.json file, evaluates the result,
 /// saves the solution to a JSON file, and iteratively updates a scoreboard in another JSON file.
-///
+/// 
 /// The evolutionary algorithm function is provided as a parameter, allowing for modularity.
 /// The function should have the signature:
-/// `fn(&Instance, usize, usize, usize, f64, f64, usize, usize, usize) -> Vec<Vec<usize>>`
-///
-/// # Arguments
-///
-/// * `alg` - The evolutionary algorithm function to use.
-/// * `population_size` - The size of the population used in the evolutionary algorithm.
-/// * `generations` - The number of generations the algorithm will run for.
-/// * `tournament_size` - The number of individuals in each tournament for selection.
-/// * `mutation_probability` - The probability of mutation being applied.
-/// * `lambda` - A parameter used for scaling.
-/// * `generation_to_print` - How frequently the progress is printed (in generations).
-/// * `num_islands` - The number of islands (subpopulations) used in the algorithm.
-/// * `migration_interval` - How frequently migration between islands occurs.
-///
+/// `fn(&Instance, usize, usize, usize, f64, f64, usize, usize, usize) -> Vec<Vec<usize>>`.
+/// 
+/// # Parameters:
+/// - `alg`: The evolutionary algorithm function to use.
+/// - `population_size`: The size of the population used in the evolutionary algorithm.
+/// - `generations`: The number of generations the algorithm will run for.
+/// - `tournament_size`: The number of individuals in each tournament for selection.
+/// - `mutation_probability`: The probability of mutation being applied.
+/// - `lambda`: A parameter used for scaling.
+/// - `generation_to_print`: How frequently progress is printed (in generations).
+/// - `num_islands`: The number of islands (subpopulations) used in the algorithm.
+/// - `migration_interval`: The interval (in generations) at which migration between islands occurs.
 pub fn run_all_trains<F>(
     alg: F,
     population_size: usize,

@@ -12,6 +12,19 @@ mod structs;
 mod utils;
 mod ea_components;
 
+/// Main method.
+/// 
+/// This function performs the following steps:
+/// 
+/// 1. Parses a problem instance from a JSON file (e.g., "src/data/train/train_2.json") which contains all necessary
+///    data for the nurse routing problem.
+/// 2. Executes the `evolutionary_algorithm_crowding_one` function with fixed parameters to compute the best solution.
+/// 3. Measures and prints the elapsed time for the evolutionary algorithm run.
+/// 4. Plots the best solution on a map and saves the diagram as an image.
+/// 5. Saves both a textual representation and a JSON representation of the best solution to output files.
+/// 
+/// Optionally, commented-out code is provided to run the evolutionary algorithm on multiple training instances
+/// and iteratively update a scoreboard.
 fn main() {
     let instance = utils::parse_data::parse_data("src/data/train/train_2.json");
     

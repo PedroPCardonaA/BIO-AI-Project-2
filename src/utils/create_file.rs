@@ -4,16 +4,13 @@ use std::io::Write;
 use serde::Serialize;
 
 /// Saves the given solution to a file in pretty-printed JSON format.
-///
-/// # Arguments
-///
-/// * `instance` - A reference to the solution represented as a vector of vectors of `usize`.
-/// * `file_path` - The path where the solution will be saved as JSON.
-///
+/// 
+/// # Parameters
+/// - `instance`: A reference to the solution, represented as a vector of routes (each route is a vector of patient IDs).
+/// - `file_path`: The file path where the JSON representation of the solution will be saved.
+/// 
 /// # Returns
-///
 /// A `std::io::Result<()>` indicating whether the file was written successfully.
-///
 pub fn save_solution_to_file(instance: &Vec<Vec<usize>>, file_path: &str) -> std::io::Result<()> {
     let mut file = File::create(file_path)?;
     let instance_json = serde_json::to_string_pretty(instance).unwrap();
