@@ -1,6 +1,6 @@
 # Steady-State Memetic Genetic Algorithm  
 
-This project implements a **Steady-State Memetic Genetic Algorithm** to solve a constrained version of the **Vehicle Routing Problem** (VRP). The objective is to optimize **nurse scheduling** by minimizing total travel time while considering constraints like time windows, workload capacity, and specified depot return times. By combining **steady-state evolution** with **local search heuristics**, the algorithm enhances route optimization efficiency.  
+This project implements a **Steady-State Memetic Genetic Algorithm** to solve a constrained version of the **Vehicle Routing Problem** (VRP). The objective is to optimize **nurse scheduling** by minimizing total travel time while considering constraints like time windows, workload capacity, and specified depot return times. By combining **steady-state evolution** with **local search heuristics**, the algorithm enhances route optimization efficiency.
 
 ## 🚀 Running the Project
 
@@ -17,6 +17,7 @@ This command compiles and runs the algorithm. When finished, an output file is g
 
 Refer to `solution.txt` for the final solution cost, which is used for the project grading.
 
+
 ## 📖 Documentation 
 
 This project uses **rustdoc** for automatic documentation. To generate and open the documentation, run:  
@@ -29,15 +30,17 @@ Your documentation will then be generated and automatically open on your preferr
 ## 🧠 Algorithm Overview 
 The Genetic Algorithm follows these key steps:  
 
-![Algorithm Overview](src/assets/ssmga.png "Overview of how the algorithm works")  
+<img src="src/assets/ssmga.png" alt="Overview of how the algorithm works" width="300">
 
-After termination, runtime statistics and the final solution score will be written to the output file.
+After termination, runtime stats can be viewed in the output folder.
+
 
 ## 📂 Project Structure  
+
 The project is **modular**, with components categorized as **Genetic Algorithm modules, Structs, and Utilities**
 
 
-### 🧬 GA Components  
+### GA Components  
 The Genetic Algorithm is divided into modular files:  
 - **generate_population.rs** – Initializes candidate solutions.  
 - **fitness.rs** – Evaluates solutions based on constraints.  
@@ -47,14 +50,14 @@ The Genetic Algorithm is divided into modular files:
 - **route_improvements.rs** – Applies local search heuristics to refine solutions.  
 - **evolutionary_algorithm.rs** – Manages the full optimization process.  
 
-### 🏗 Structs  
+### Structs  
 The project defines four core **structs**:  
 - **Depot** – Represents the start and end location.  
 - **Instance** – Stores problem-specific data.  
 - **Nurse** – Models an individual worker with constraints.  
 - **Patient** – Represents a service location with scheduling needs.  
 
-### 🔧 Utilities  
+### Utilities  
 Helper functions for file handling, parsing, and visualization:  
 - **create_file.rs** – Manages output file generation.  
 - **mod.rs** – Handles module imports.  
@@ -64,6 +67,6 @@ Helper functions for file handling, parsing, and visualization:
 - **score_recorder.rs** – Logs solution fitness over time.  
 - **textual_answer.rs** – Formats output in a readable way.
 
-
 ## 👥 Authors and Contribution
-This project was a **collaborative effort**, with all team members contributing equally.  
+
+This project was a **collaborative effort**, with all team members contributing equally.
