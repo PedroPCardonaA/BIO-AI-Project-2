@@ -23,9 +23,9 @@ pub fn calculated_cost(route: &Vec<usize>, nurse: &Nurse, instance: &Instance) -
 
     // STEP 1: Initialize variables.
     // Penalty factors                        // Description
-    let penalty_factor_late = 50.0;      // Penalty per time unit past patient's end time.
-    let penalty_factor_capacity = 1.0;   // Penalty per unit of load exceeding capacity.
-    let penalty_factor_return = 1.0;     // Penalty per time unit past depot return time.
+    let penalty_factor_late = 55.0;      // Penalty per time unit past patient's end time.
+    let penalty_factor_capacity = 4.0;   // Penalty per unit of load exceeding capacity.
+    let penalty_factor_return = 3.0;     // Penalty per time unit past depot return time.
 
     // State variables                     
     let mut current_time = 0.0;          // Tracks cumulative time (travel, waiting, and service).
