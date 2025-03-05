@@ -246,14 +246,10 @@ pub fn meta_mutation(
     // STEP 3: Apply the chosen mutation operator based on the random selection.
     if op_choice < 0.2 {
         mutation_local_search(individual, mutation_rate, instance);
-    } else if op_choice < 0.4 {
-        mutation_swap(individual);
-    } else if op_choice < 0.6 {
-        mutation_insert(individual);
-    } else if op_choice < 0.8 {
-        mutation_scramble(individual);
-    } else {
-        mutation_inversion(individual);
     }
+    mutation_swap(individual);
+    mutation_insert(individual);
+    mutation_scramble(individual);
+    mutation_inversion(individual);
 }
 
