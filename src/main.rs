@@ -69,15 +69,15 @@ fn main() {
         //("train_6", 924.0),
         //("train_7", 870.0),
         //("train_8", 731.0),
-        //("train_9", 855.0),
+        ("train_9", 855.0),
     ];
 
     // Run the evolutionary algorithm on the specified benchmarks.
     run_trains_range(
         evolutionary_algorithm_crowding_one, 
         benchmarks,                                           // benchmark range of instances
-        30,                                  // population_size
-        5000,                                   // generations
+        40,                                  // population_size
+        15000,                                   // generations
         5,                                   // tournament_size
         0.2,                            // mutation_probability
         1.2,                                          // lambda

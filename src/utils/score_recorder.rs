@@ -1,12 +1,13 @@
+use std::collections::HashMap;
+use std::fs;
 use std::time::Instant;
 use serde::Serialize;
 
 use crate::ea_components::fitness::fitness;
-use crate::utils::create_file::{save_json, save_solution_to_file};
-use crate::utils::textual_answer::save_textual_solution_to_file;
-use crate::utils::plot_map::plot_map_with_path;
+use crate::utils::create_file::{cleanup_current_best_folder, save_best_solution_files, save_current_solution_files, save_json};
 use crate::utils::parse_data::parse_data;
 use crate::structs::instance::Instance;
+
 
 /// Represents the score for one training instance.
 /// 
@@ -56,32 +57,77 @@ struct ScoreBoard {
     max_possible_score: f64,
 }
 
-/// Runs the provided evolutionary algorithm on a specified range of train_x.json files in an endless loop,
-/// saving each run's solution (JSON, TXT, and PNG) to the instance-specific directory (e.g., output/scoring/train_0/),
-/// and continually updating the best solution for each instance in a "current_best" subdirectory.
-/// 
-/// For each instance provided in the benchmarks parameter, the function:
+/// Scans the current_best folder and updates the best_solutions map with the lowest stored objective value.
+///
+/// # Parameters
+/// - `instance_name`: The name of the instance.
+/// - `current_best_dir`: The path to the instance's current_best folder.
+/// - `instance`: A reference to the parsed instance.
+/// - `best_solutions`: A mutable reference to the map storing the best solution for each instance.
+///
+/// # Remarks
+/// This function reads file names in the format "best_solution_<score>.json" and updates the in‑memory best
+/// solution if a lower objective value is found.
+fn update_best_solution_from_folder(
+    instance_name: &str,
+    current_best_dir: &str,
+    instance: &Instance,
+    best_solutions: &mut HashMap<String, (f64, Vec<Vec<usize>>, Instance)>,
+) {
+    if let Ok(entries) = fs::read_dir(current_best_dir) {
+        for entry in entries.flatten() {
+            if let Ok(file_name) = entry.file_name().into_string() {
+                if let Some(score_str) = file_name.strip_prefix("best_solution_")
+                    .and_then(|s| s.strip_suffix(".json"))
+                {
+                    if let Ok(parsed_score) = score_str.parse::<u32>() {
+                        let stored_obj_value = parsed_score as f64 / 100.0;
+                        best_solutions
+                            .entry(instance_name.to_string())
+                            .and_modify(|(curr_best, _sol, _inst)| {
+                                if stored_obj_value < *curr_best {
+                                    *curr_best = stored_obj_value;
+                                }
+                            })
+                            .or_insert((stored_obj_value, Vec::new(), instance.clone()));
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Continuously runs the evolutionary algorithm on the provided benchmark instances.
+///
+/// For each instance, the function:
 /// 1. Parses the instance from a JSON file.
-/// 2. Runs the evolutionary algorithm and times its execution.
-/// 3. Saves the current run's solution to JSON, TXT, and PNG files in the instance's output directory,
-///    overwriting previous files.
-/// 4. Evaluates the solution's objective value using the fitness function.
-/// 5. If the current solution is better than the best so far for that instance, updates the best solution
-///    files in the "current_best" subdirectory (overwriting previous bests).
-/// 6. Repeats the process indefinitely until the process is manually stopped.
-/// 
-/// # Parameters:
+/// 2. Cleans the instance's "current_best" folder (once per outer loop) by removing any file whose
+///    stored objective value is more than 10% above the benchmark value.
+/// 3. Runs the evolutionary algorithm and times its execution.
+/// 4. Saves the current run's solution to JSON, TXT, and PNG files (overwriting previous current run files).
+/// 5. Evaluates the solution's objective value using the fitness function.
+/// 6. If a new best solution is found (i.e. its objective value is lower than the stored best), it:
+///    - Cleans the current_best folder again (removing any file whose stored value is above benchmark * 1.10),
+///    - Updates the in‑memory best solution, and
+///    - Saves the new best solution with a unique file name.
+/// 7. Updates and saves the overall scoreboard with the current run's scores.
+/// 8. Repeats the process indefinitely.
+///
+/// # Parameters
 /// - `alg`: The evolutionary algorithm function to use. It should have the signature:
 ///   `fn(&Instance, usize, usize, usize, f64, f64, usize, usize, usize) -> Vec<Vec<usize>>`.
-/// - `benchmarks`: A vector of tuples `(instance_name, benchmark)` for the instances to process.
-/// - `population_size`: The population size used in the evolutionary algorithm.
-/// - `generations`: The number of generations the algorithm will run for.
+/// - `benchmarks`: A vector of tuples `(instance_name, benchmark)`.
+/// - `population_size`: The population size for the algorithm.
+/// - `generations`: The number of generations to run.
 /// - `tournament_size`: The number of individuals in each tournament for selection.
-/// - `mutation_probability`: The probability of mutation being applied.
+/// - `mutation_probability`: The probability of mutation.
 /// - `lambda`: A scaling parameter used by the algorithm.
-/// - `generation_to_print`: How frequently (in generations) progress is printed.
-/// - `num_islands`: The number of islands (subpopulations) used in the algorithm.
-/// - `migration_interval`: The interval (in generations) at which migration between islands occurs.
+/// - `generation_to_print`: The frequency (in generations) for printing progress.
+/// - `num_islands`: The number of islands (subpopulations) used by the algorithm.
+/// - `migration_interval`: The interval (in generations) for migration.
+///
+/// # Remarks
+/// The function continuously trains the evolutionary algorithm on the provided instances until manually stopped.
 pub fn run_trains_range<F>(
     alg: F,
     benchmarks: Vec<(&str, f64)>,
@@ -107,23 +153,42 @@ where
             usize,
         ) -> Vec<Vec<usize>>,
 {
-    use std::collections::HashMap;
-    // Maintain a HashMap to store the best solution for each instance.
+    // Persistent map for each instance's best solution.
     let mut best_solutions: HashMap<String, (f64, Vec<Vec<usize>>, Instance)> = HashMap::new();
 
-    // Endless loop: runs until the user stops the process.
+    // Endless loop: the training process repeats indefinitely.
     loop {
-        // Process each benchmark instance provided.
-        for (idx, (instance_name, benchmark)) in benchmarks.iter().enumerate() {
-            // STEP: Build the file path for the instance JSON file.
+        // --- One-Time Cleanup per Outer Loop Iteration ---
+        // For each instance, clean up its current_best folder.
+        for (instance_name, benchmark) in &benchmarks {
+            let current_best_dir = format!("output/scoring/{}/current_best", instance_name);
+            cleanup_current_best_folder(&current_best_dir, *benchmark);
+        }
+        // --- End One-Time Cleanup ---
+
+        // Reinitialize scoreboard data.
+        let mut scores: Vec<ScoreEntry> = Vec::new();
+        let mut total_score = 0.0;
+        let max_possible = benchmarks.len() as f64 * 8.33;
+
+        // Process each benchmark instance.
+        for (instance_name, benchmark) in benchmarks.iter() {
+            // Parse the instance from its JSON file.
             let file_path = format!("src/data/train/{}.json", instance_name);
             println!("Processing instance: {}", instance_name);
-
             let instance = parse_data(&file_path);
 
-            // STEP 1: Run the evolutionary algorithm and time its execution.
+            // Create output directories.
+            let output_dir = format!("output/scoring/{}", instance_name);
+            let current_best_dir = format!("{}/current_best", output_dir);
+            fs::create_dir_all(&output_dir).expect("Unable to create output directory");
+
+            // Update in-memory best solution info from the current_best folder.
+            update_best_solution_from_folder(instance_name, &current_best_dir, &instance, &mut best_solutions);
+
+            // Run the evolutionary algorithm and time its execution.
             let start_time = Instant::now();
-            let best_solution = alg(
+            let current_solution = alg(
                 &instance,
                 population_size,
                 generations,
@@ -141,55 +206,62 @@ where
                 duration.as_secs_f64()
             );
 
-            // STEP 2: Create the output directory for this instance.
-            let output_dir = format!("output/scoring/{}", instance_name);
-            std::fs::create_dir_all(&output_dir)
-                .expect("Unable to create output directory");
+            // Save the current solution files.
+            save_current_solution_files(&output_dir, &current_solution, &instance);
 
-            // STEP 3: Define file paths for the current run's solution (which will be overwritten on each run).
-            let sol_file_json = format!("{}/solution.json", output_dir);
-            let sol_file_txt = format!("{}/solution.txt", output_dir);
-            let sol_file_png = format!("{}/solution.png", output_dir);
-
-            // STEP 4: Save the current run's solution.
-            match save_solution_to_file(&best_solution, &sol_file_json) {
-                Ok(_) => println!("Solution for {} updated in {}", instance_name, sol_file_json),
-                Err(e) => eprintln!("Error saving solution for {}: {}", instance_name, e),
-            }
-            save_textual_solution_to_file(&sol_file_txt, &best_solution, &instance);
-            plot_map_with_path(&best_solution, &instance.patients, &instance.depot, &sol_file_png);
-
-            // STEP 5: Evaluate the objective value using the fitness function.
-            let obj_value = fitness(&best_solution, &instance);
+            // Evaluate the objective value of the current solution.
+            let obj_value = fitness(&current_solution, &instance);
             println!("Objective value for {}: {:.2}", instance_name, obj_value);
 
-            // STEP: Update the best solution for this instance if the current solution is better.
-
-            ///TODO: ADD SCOREBOARD|
-            let entry = best_solutions
+            // If a new best solution is found, update and save it.
+            let best_entry = best_solutions
                 .entry(instance_name.to_string())
                 .or_insert((f64::INFINITY, Vec::new(), instance.clone()));
-            if obj_value < entry.0 {
-                *entry = (obj_value, best_solution.clone(), instance.clone());
-                // STEP: Save the new best solution in the instance's "current_best" subdirectory.
-                let current_best_dir = format!("{}/current_best", output_dir);
-                std::fs::create_dir_all(&current_best_dir)
-                    .expect("Unable to create current_best directory");
-                let best_sol_file_json = format!("{}/best_solution.json", current_best_dir);
-                let best_sol_file_txt = format!("{}/best_solution.txt", current_best_dir);
-                let best_sol_file_png = format!("{}/best_solution.png", current_best_dir);
-                match save_solution_to_file(&best_solution, &best_sol_file_json) {
-                    Ok(_) => println!(
-                        "Current best solution for {} updated in {}",
-                        instance_name, best_sol_file_json
-                    ),
-                    Err(e) => eprintln!(
-                        "Error saving current best solution for {}: {}",
-                        instance_name, e
-                    ),
-                }
-                save_textual_solution_to_file(&best_sol_file_txt, &best_solution, &instance);
-                plot_map_with_path(&best_solution, &instance.patients, &instance.depot, &best_sol_file_png);
+            if obj_value < best_entry.0 {
+                // Clean up any bad solutions in the current_best folder.
+                cleanup_current_best_folder(&current_best_dir, *benchmark);
+
+                // Update the best solution in memory.
+                *best_entry = (obj_value, current_solution.clone(), instance.clone());
+                fs::create_dir_all(&current_best_dir).expect("Unable to create current_best directory");
+                save_best_solution_files(&current_best_dir, obj_value, &current_solution, &instance);
+            }
+
+            // Compute the percentage difference and score for the instance.
+            let percent_diff = ((obj_value - benchmark) / benchmark) * 100.0;
+            let instance_score = if obj_value <= benchmark * 1.05 {
+                8.33
+            } else if obj_value <= benchmark * 1.10 {
+                6.5
+            } else if obj_value <= benchmark * 1.20 {
+                4.0
+            } else if obj_value <= benchmark * 1.30 {
+                2.0
+            } else {
+                0.0
+            };
+            total_score += instance_score;
+
+            // Create a score entry for the current instance.
+            scores.push(ScoreEntry {
+                instance_name: instance_name.to_string(),
+                benchmark: *benchmark,
+                objective_value: obj_value,
+                score: instance_score,
+                percent_difference: percent_diff,
+            });
+
+            // Update and save the overall scoreboard.
+            let average_score = total_score / scores.len() as f64;
+            let scoreboard = ScoreBoard {
+                scores: scores.clone(),
+                average_score,
+                total_score,
+                max_possible_score: max_possible,
+            };
+            match save_json(&scoreboard, "output/scoring/scoreboard.json") {
+                Ok(_) => println!("Scoreboard updated ({} instances processed).", scores.len()),
+                Err(e) => eprintln!("Error updating scoreboard: {}", e),
             }
         }
         println!("Completed one full iteration over all instances. Starting next iteration...");
