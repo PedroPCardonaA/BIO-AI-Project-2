@@ -1,7 +1,7 @@
 
 use std::time::Instant;
 
-use ea_components::evolutionary_algorithm::evolutionary_algorithm_crowding_one;
+use ea_components::evolutionary_algorithm::ssmga;
 use utils::{
     plot_map::plot_map_with_path, 
     textual_answer::save_textual_solution_to_file, 
@@ -69,15 +69,15 @@ fn main() {
         //("train_6", 924.0),
         //("train_7", 870.0),
         //("train_8", 731.0),
-        //("train_9", 855.0),
+        ("train_9", 855.0),
     ];
 
-    // Run the evolutionary algorithm on the specified benchmarks.
+    // Run the evolutionary algorithm (being the designed Steady-State Memetic Genetic Algorithm) on the specified benchmarks.
     run_trains_range(
-        evolutionary_algorithm_crowding_one, 
+        ssmga, 
         benchmarks,                                           // benchmark range of instances
-        30,                                  // population_size
-        5000,                                   // generations
+        40,                                  // population_size
+        15000,                                   // generations
         5,                                   // tournament_size
         0.2,                            // mutation_probability
         1.2,                                          // lambda
