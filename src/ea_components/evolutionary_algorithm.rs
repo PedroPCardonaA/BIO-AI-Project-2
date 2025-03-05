@@ -65,6 +65,10 @@ fn distance(ind1: &Vec<Vec<usize>>, ind2: &Vec<Vec<usize>>) -> usize {
     diff
 }
 
+/// Steady-State Memetic Genetic Algorithm (SSMGA)
+/// The final algorithm produced in project 2 in Bio-AI.
+/// This algorithm is a memetic algorithm (being an extension of the evolutionary algorithm with a local search heuristic added)
+///  as well as being a genetic algorithm which is run to perform evolution of the individuals on a steady-state basis. 
 /// Executes a parallelized evolutionary algorithm with crowding replacement for solving the home-care routing problem.
 ///
 /// The function implements a genetic algorithm that minimizes the total travel time for home-care nurses
@@ -87,7 +91,8 @@ fn distance(ind1: &Vec<Vec<usize>>, ind2: &Vec<Vec<usize>>) -> usize {
 /// # Returns
 /// Returns the best overall solution found as a vector of routes, where each route is represented as a vector
 /// of patient IDs. Each route implicitly starts and ends at the depot, which is managed externally.
-pub fn evolutionary_algorithm_crowding_one( //TODO: change to SSMGA-naming // TODO: change folder to ga_components
+/// SSMGA
+pub fn ssmga(
     instance: &Instance,
     population_size: usize,
     generations: usize,
