@@ -56,25 +56,35 @@ struct ScoreBoard {
     max_possible_score: f64,
 }
 
-/// Runs the provided evolutionary algorithm on each train_x.json file, evaluates the result,
-/// saves a JSON, an image (png) and a textual representation of the solution, and iteratively updates a scoreboard.
+/// Runs the provided evolutionary algorithm on a specified range of train_x.json files in an endless loop,
+/// saving each run's solution (JSON, TXT, and PNG) to the instance-specific directory (e.g., output/scoring/train_0/),
+/// and continually updating the best solution for each instance in a "current_best" subdirectory.
 /// 
-/// The evolutionary algorithm function is provided as a parameter, allowing for modularity.
-/// The function should have the signature:
-/// `fn(&Instance, usize, usize, usize, f64, f64, usize, usize, usize) -> Vec<Vec<usize>>`.
+/// For each instance provided in the benchmarks parameter, the function:
+/// 1. Parses the instance from a JSON file.
+/// 2. Runs the evolutionary algorithm and times its execution.
+/// 3. Saves the current run's solution to JSON, TXT, and PNG files in the instance's output directory,
+///    overwriting previous files.
+/// 4. Evaluates the solution's objective value using the fitness function.
+/// 5. If the current solution is better than the best so far for that instance, updates the best solution
+///    files in the "current_best" subdirectory (overwriting previous bests).
+/// 6. Repeats the process indefinitely until the process is manually stopped.
 /// 
 /// # Parameters:
-/// - `alg`: The evolutionary algorithm function to use.
-/// - `population_size`: The size of the population used in the evolutionary algorithm.
+/// - `alg`: The evolutionary algorithm function to use. It should have the signature:
+///   `fn(&Instance, usize, usize, usize, f64, f64, usize, usize, usize) -> Vec<Vec<usize>>`.
+/// - `benchmarks`: A vector of tuples `(instance_name, benchmark)` for the instances to process.
+/// - `population_size`: The population size used in the evolutionary algorithm.
 /// - `generations`: The number of generations the algorithm will run for.
 /// - `tournament_size`: The number of individuals in each tournament for selection.
 /// - `mutation_probability`: The probability of mutation being applied.
-/// - `lambda`: A parameter used for scaling.
-/// - `generation_to_print`: How frequently progress is printed (in generations).
+/// - `lambda`: A scaling parameter used by the algorithm.
+/// - `generation_to_print`: How frequently (in generations) progress is printed.
 /// - `num_islands`: The number of islands (subpopulations) used in the algorithm.
 /// - `migration_interval`: The interval (in generations) at which migration between islands occurs.
-pub fn run_all_trains<F>(
+pub fn run_trains_range<F>(
     alg: F,
+    benchmarks: Vec<(&str, f64)>,
     population_size: usize,
     generations: usize,
     tournament_size: usize,
@@ -97,115 +107,91 @@ where
             usize,
         ) -> Vec<Vec<usize>>,
 {
-    let benchmarks = vec![
-        ("train_0", 827.0),
-        ("train_1", 589.0),
-        ("train_2", 1258.0),
-        ("train_3", 1132.0),
-        ("train_4", 1261.0),
-        ("train_5", 1092.0),
-        ("train_6", 924.0),
-        ("train_7", 870.0),
-        ("train_8", 731.0),
-        ("train_9", 855.0),
-    ];
+    use std::collections::HashMap;
+    // Maintain a HashMap to store the best solution for each instance.
+    let mut best_solutions: HashMap<String, (f64, Vec<Vec<usize>>, Instance)> = HashMap::new();
 
-    let mut scores: Vec<ScoreEntry> = Vec::new();
-    let mut total_score = 0.0;
-    let max_possible = benchmarks.len() as f64 * 8.33;
-    let iteration_started_time = Instant::now();
+    // Endless loop: runs until the user stops the process.
+    loop {
+        // Process each benchmark instance provided.
+        for (idx, (instance_name, benchmark)) in benchmarks.iter().enumerate() {
+            // STEP: Build the file path for the instance JSON file.
+            let file_path = format!("src/data/train/{}.json", instance_name);
+            println!("Processing instance: {}", instance_name);
 
-    // Process each benchmark instance.
-    for (idx, (instance_name, benchmark)) in benchmarks.iter().enumerate() {
-        let file_path = format!("src/data/train/{}.json", instance_name);
-        println!("Processing instance: {}", instance_name);
+            let instance = parse_data(&file_path);
 
-        let instance = parse_data(&file_path);
+            // STEP 1: Run the evolutionary algorithm and time its execution.
+            let start_time = Instant::now();
+            let best_solution = alg(
+                &instance,
+                population_size,
+                generations,
+                tournament_size,
+                mutation_probability,
+                lambda,
+                generation_to_print,
+                num_islands,
+                migration_interval,
+            );
+            let duration = start_time.elapsed();
+            println!(
+                "Instance {} solved in {:.4} seconds",
+                instance_name,
+                duration.as_secs_f64()
+            );
 
-        // STEP 1: Run the evolutionary algorithm and time the execution.
-        let start_time = Instant::now();
-        let best_solution = alg(
-            &instance,
-            population_size,
-            generations,
-            tournament_size,
-            mutation_probability,
-            lambda,
-            generation_to_print,
-            num_islands,
-            migration_interval,
-        );
+            // STEP 2: Create the output directory for this instance.
+            let output_dir = format!("output/scoring/{}", instance_name);
+            std::fs::create_dir_all(&output_dir)
+                .expect("Unable to create output directory");
 
-        let duration = start_time.elapsed();
-        println!(
-            "Instance {} solved in {:.4} seconds",
-            instance_name,
-            duration.as_secs_f64()
-        );
+            // STEP 3: Define file paths for the current run's solution (which will be overwritten on each run).
+            let sol_file_json = format!("{}/solution.json", output_dir);
+            let sol_file_txt = format!("{}/solution.txt", output_dir);
+            let sol_file_png = format!("{}/solution.png", output_dir);
 
-        // STEP 2: Create output directories for the instance.
-        let output_dir = format!("output/scoring/{}", instance_name);
-        std::fs::create_dir_all(&output_dir).expect("Unable to create output directory");
+            // STEP 4: Save the current run's solution.
+            match save_solution_to_file(&best_solution, &sol_file_json) {
+                Ok(_) => println!("Solution for {} updated in {}", instance_name, sol_file_json),
+                Err(e) => eprintln!("Error saving solution for {}: {}", instance_name, e),
+            }
+            save_textual_solution_to_file(&sol_file_txt, &best_solution, &instance);
+            plot_map_with_path(&best_solution, &instance.patients, &instance.depot, &sol_file_png);
 
-        let sol_file_json = format!("{}/solution_{}.json", output_dir, idx);
-        let sol_file_txt = format!("{}/solution_{}.txt", output_dir, idx);
-        let sol_file_png = format!("{}/solution_{}.png", output_dir, idx);
+            // STEP 5: Evaluate the objective value using the fitness function.
+            let obj_value = fitness(&best_solution, &instance);
+            println!("Objective value for {}: {:.2}", instance_name, obj_value);
 
-        // STEP 3: Save the best solution in JSON, TXT and PNG. 
-        match save_solution_to_file(&best_solution, &sol_file_json) {
-            Ok(_) => println!("Solution for {} saved to {}", instance_name, sol_file_json),
-            Err(e) => eprintln!("Error saving solution for {}: {}", instance_name, e),
+            // STEP: Update the best solution for this instance if the current solution is better.
+
+            ///TODO: ADD SCOREBOARD|
+            let entry = best_solutions
+                .entry(instance_name.to_string())
+                .or_insert((f64::INFINITY, Vec::new(), instance.clone()));
+            if obj_value < entry.0 {
+                *entry = (obj_value, best_solution.clone(), instance.clone());
+                // STEP: Save the new best solution in the instance's "current_best" subdirectory.
+                let current_best_dir = format!("{}/current_best", output_dir);
+                std::fs::create_dir_all(&current_best_dir)
+                    .expect("Unable to create current_best directory");
+                let best_sol_file_json = format!("{}/best_solution.json", current_best_dir);
+                let best_sol_file_txt = format!("{}/best_solution.txt", current_best_dir);
+                let best_sol_file_png = format!("{}/best_solution.png", current_best_dir);
+                match save_solution_to_file(&best_solution, &best_sol_file_json) {
+                    Ok(_) => println!(
+                        "Current best solution for {} updated in {}",
+                        instance_name, best_sol_file_json
+                    ),
+                    Err(e) => eprintln!(
+                        "Error saving current best solution for {}: {}",
+                        instance_name, e
+                    ),
+                }
+                save_textual_solution_to_file(&best_sol_file_txt, &best_solution, &instance);
+                plot_map_with_path(&best_solution, &instance.patients, &instance.depot, &best_sol_file_png);
+            }
         }
-        save_textual_solution_to_file(&sol_file_txt, &best_solution, &instance);
-
-        plot_map_with_path(&best_solution, &instance.patients, &instance.depot, &sol_file_png);
-
-        // STEP 4: Evaluate the objective value using the fitness function.
-        let obj_value = fitness(&best_solution, &instance);
-
-        let percent_diff = ((obj_value - benchmark) / benchmark) * 100.0;
-
-        let instance_score = if obj_value <= benchmark * 1.05 {
-            8.33
-        } else if obj_value <= benchmark * 1.10 {
-            6.5
-        } else if obj_value <= benchmark * 1.20 {
-            4.0
-        } else if obj_value <= benchmark * 1.30 {
-            2.0
-        } else {
-            0.0
-        };
-        total_score += instance_score;
-
-        // STEP 5: Create a score entry for this instance.
-        let entry = ScoreEntry {
-            instance_name: instance_name.to_string(),
-            benchmark: *benchmark,
-            objective_value: obj_value,
-            score: instance_score,
-            percent_difference: percent_diff,
-        };
-        scores.push(entry);
-
-        // STEP 6: Update the overall scoreboard.
-        let average_score = total_score / scores.len() as f64;
-        let scoreboard = ScoreBoard {
-            scores: scores.clone(),
-            average_score,
-            total_score,
-            max_possible_score: max_possible,
-        };
-
-        let duration_of_all = iteration_started_time.elapsed();
-        println!(
-            "All instances processed in {:.4} seconds",
-            duration_of_all.as_secs_f64()
-        );
-
-        match save_json(&scoreboard, "output/scoring/scoreboard.json") {
-            Ok(_) => println!("Scoreboard updated ({} instances processed).", scores.len()),
-            Err(e) => eprintln!("Error updating scoreboard: {}", e),
-        }
+        println!("Completed one full iteration over all instances. Starting next iteration...");
     }
 }
