@@ -62,27 +62,27 @@ fn main() {
     let benchmarks = vec![
         //("train_0", 827.0),
         //("train_1", 589.0),
-        ("train_2", 1258.0),
+        //("train_2", 1258.0),
         //("train_3", 1132.0),
         //("train_4", 1261.0),
         //("train_5", 1092.0),
         //("train_6", 924.0),
         //("train_7", 870.0),
         //("train_8", 731.0),
-        //("train_9", 855.0),
+        ("train_9", 855.0),
     ];
 
     // Run the evolutionary algorithm on the specified benchmarks.
     run_trains_range(
         evolutionary_algorithm_crowding_one, 
         benchmarks,                                           // benchmark range of instances
-        30,                                  // population_size
-        5000,                                   // generations
+        200,                                  // population_size
+        70000,                                   // generations
         5,                                   // tournament_size
         0.2,                            // mutation_probability
         1.2,                                          // lambda
-        2000,                            // generation_to_print
+        3000,                            // generation_to_print
         1,                                       // num_islands
         10000                             // migration_interval
     );
-}
+} 
