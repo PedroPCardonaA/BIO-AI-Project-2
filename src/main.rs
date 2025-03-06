@@ -26,7 +26,7 @@ mod ea_components;
 /// Optionally, commented-out code is provided to run the evolutionary algorithm on multiple training instances
 /// and iteratively update a scoreboard.
 fn main() {
-    
+    /*
     let instance = utils::parse_data::parse_data("src/data/test/test_0.json");
     
     let start_time = Instant::now();
@@ -55,11 +55,11 @@ fn main() {
     save_textual_solution_to_file("output/solution.txt", &best_solution, &instance);
 
     let _ = save_solution_to_file(&best_solution, "output/solution.json");
+    */
     // Run all training instances using the crowding algorithm.
     //TODO: Uncomment this line to run all training instances
     
     
-    /* 
     let benchmarks = vec![
         //("train_0", 827.0),
         //("train_1", 589.0),
@@ -70,21 +70,24 @@ fn main() {
         //("train_6", 924.0),
         //("train_7", 870.0),
         //("train_8", 731.0),
-        ("train_9", 855.0),
+        //("train_9", 855.0),
+        //("test_0", 826.3),
+        ("test_1", 1513.7),
+        ("test_2", 900.5),
     ];
 
     // Run the evolutionary algorithm (being the designed Steady-State Memetic Genetic Algorithm) on the specified benchmarks.
     run_trains_range(
         ssmga, 
         benchmarks,                                           // benchmark range of instances
-        200,                                  // population_size
-        70000,                                   // generations
-        5,                                   // tournament_size
+        30,                                 // population_size
+        100000,                                   // generations
+        6,                                   // tournament_size
         0.2,                            // mutation_probability
         1.2,                                          // lambda
-        3000,                            // generation_to_print
+        1000,                            // generation_to_print
         1,                                       // num_islands
         10000                             // migration_interval
     );
-    */
+
 } 

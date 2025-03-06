@@ -156,12 +156,14 @@ where
     // Persistent map for each instance's best solution.
     let mut best_solutions: HashMap<String, (f64, Vec<Vec<usize>>, Instance)> = HashMap::new();
 
+    
+
     // Endless loop: the training process repeats indefinitely.
     loop {
         // --- One-Time Cleanup per Outer Loop Iteration ---
         // For each instance, clean up its current_best folder.
         for (instance_name, benchmark) in &benchmarks {
-            let current_best_dir = format!("output/scoring/{}/current_best", instance_name);
+            let current_best_dir = format!("output/scoring_test/{}/current_best", instance_name);
             cleanup_current_best_folder(&current_best_dir, *benchmark);
         }
         // --- End One-Time Cleanup ---
@@ -174,12 +176,12 @@ where
         // Process each benchmark instance.
         for (instance_name, benchmark) in benchmarks.iter() {
             // Parse the instance from its JSON file.
-            let file_path = format!("src/data/train/{}.json", instance_name);
+            let file_path = format!("src/data/test/{}.json", instance_name);
             println!("Processing instance: {}", instance_name);
             let instance = parse_data(&file_path);
 
             // Create output directories.
-            let output_dir = format!("output/scoring/{}", instance_name);
+            let output_dir = format!("output/scoring_test/{}", instance_name);
             let current_best_dir = format!("{}/current_best", output_dir);
             fs::create_dir_all(&output_dir).expect("Unable to create output directory");
 
@@ -259,7 +261,7 @@ where
                 total_score,
                 max_possible_score: max_possible,
             };
-            match save_json(&scoreboard, "output/scoring/scoreboard.json") {
+            match save_json(&scoreboard, "output/scoring_test/scoreboard.json") {
                 Ok(_) => println!("Scoreboard updated ({} instances processed).", scores.len()),
                 Err(e) => eprintln!("Error updating scoreboard: {}", e),
             }
