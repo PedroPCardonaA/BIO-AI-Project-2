@@ -26,11 +26,11 @@ mod ea_components;
 /// Optionally, commented-out code is provided to run the evolutionary algorithm on multiple training instances
 /// and iteratively update a scoreboard.
 fn main() {
-    /*
-    let instance = utils::parse_data::parse_data("src/data/train/train_9.json");
+    
+    let instance = utils::parse_data::parse_data("src/data/test/test_0.json");
     
     let start_time = Instant::now();
-    let best_solution = evolutionary_algorithm_crowding_one(
+    let best_solution = ssmga(
             &instance,
             30,
             30000,
@@ -58,7 +58,8 @@ fn main() {
     // Run all training instances using the crowding algorithm.
     //TODO: Uncomment this line to run all training instances
     
-    */
+    
+    /* 
     let benchmarks = vec![
         //("train_0", 827.0),
         //("train_1", 589.0),
@@ -85,4 +86,5 @@ fn main() {
         1,                                       // num_islands
         10000                             // migration_interval
     );
+    */
 } 
