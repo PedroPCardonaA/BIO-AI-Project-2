@@ -87,6 +87,7 @@ pub fn calculated_cost(route: &Vec<usize>, nurse: &Nurse, instance: &Instance) -
 /// 
 /// For a given solution—represented as a vector of routes (one per nurse)—this function calculates
 /// the cost for each route using `calculated_cost` and returns the cumulative cost as the solution's fitness.
+/// This means that it is a cost function that should be minimized.
 /// 
 /// # Parameters
 /// - `solution`: A vector of routes, where each route is a vector of patient IDs.
