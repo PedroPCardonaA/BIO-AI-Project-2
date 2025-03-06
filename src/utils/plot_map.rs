@@ -61,15 +61,37 @@ pub fn plot_map_with_path(
         .unwrap();
     chart.configure_mesh().draw().unwrap();
 
-    // Generate unique colors for each nurse route using the HSL color space.
-    let num_nurses = solution.len();
-    let colors: Vec<RGBColor> = (0..num_nurses)
-        .map(|i| {
-            let hue = 360.0 * (i as f64 / num_nurses as f64);
+    // First, compute the indices of non-empty nurse routes.
+    let non_empty_indices: Vec<usize> = solution
+    .iter()
+    .enumerate()
+    .filter_map(|(i, route)| if route.is_empty() { None } else { Some(i) })
+    .collect();
+    let num_non_empty = non_empty_indices.len();
+
+    // Now, assign a color for each nurse.
+    // If a nurse's route is empty, assign BLACK.
+    // Otherwise, use its rank (position) among non-empty nurses to compute a unique hue.
+    let colors: Vec<RGBColor> = solution
+    .iter()
+    .enumerate()
+    .map(|(i, route)| {
+        if route.is_empty() {
+            BLACK
+        } else {
+            // Find the rank of this nurse among non-empty nurses.
+            let rank = non_empty_indices
+                .iter()
+                .position(|&x| x == i)
+                .unwrap();
+            let hue = 360.0 * (rank as f64 / num_non_empty as f64);
             let (r, g, b) = hsl_to_rgb(hue, 0.8, 0.5);
             RGBColor(r, g, b)
-        })
-        .collect();
+        }
+    })
+    .collect();
+
+
 
     // Draw the depot.
     let depot_point = scale_point(depot.x_coord, depot.y_coord, depot, scale_factor);
