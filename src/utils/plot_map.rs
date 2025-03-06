@@ -8,26 +8,29 @@ use crate::structs::{depot::Depot, patient::Patient};
 /// This function generates a visual representation of the solution by plotting the depot, patient locations,
 /// and nurse routes. Patient coordinates are scaled relative to the depot using a scale factor. Unique colors
 /// are generated for each nurse route via an HSL-to-RGB conversion, and arrows are drawn along the routes
-/// to indicate direction. A legend is added to identify each nurse's route.
-/// 
-/// # Parameters:
-/// - `solution`: A reference to the solution, represented as a vector of routes (each route is a vector of patient IDs).
-/// - `patients`: A reference to a HashMap mapping patient IDs (as strings) to their corresponding `Patient` structs.
-/// - `depot`: A reference to the `Depot` struct containing the depot's coordinates and return time.
-/// - `output_path`: The file path where the PNG image will be saved.
+/// to indicate direction. A legend is added on the right side of the plot to identify each nurse's route.
 pub fn plot_map_with_path(
     solution: &Vec<Vec<usize>>,
     patients: &HashMap<String, Patient>,
     depot: &Depot,
     output_path: &str,
 ) {
-    let root = BitMapBackend::new(output_path, (900, 900)).into_drawing_area();
+    // Create a 1200x1200 canvas.
+    let root = BitMapBackend::new(output_path, (1400, 1200)).into_drawing_area();
     root.fill(&WHITE).unwrap();
+
+    // Split the drawing area: left 80% for the map, right 20% for the legend.
+    let (map_area, legend_area) = root.split_horizontally(1400.0*0.875);
 
     let scale_factor = 1.5;
 
     // Helper function to scale coordinates relative to the depot.
-    fn scale_point(x: f64, y: f64, depot: &crate::structs::depot::Depot, factor: f64) -> (f64, f64) {
+    fn scale_point(
+        x: f64,
+        y: f64,
+        depot: &crate::structs::depot::Depot,
+        factor: f64,
+    ) -> (f64, f64) {
         (
             depot.x_coord + (x - depot.x_coord) * factor,
             depot.y_coord + (y - depot.y_coord) * factor,
@@ -48,8 +51,8 @@ pub fn plot_map_with_path(
         if scaled_y > max_y { max_y = scaled_y; }
     }
 
-    // Build and configure the chart.
-    let mut chart = ChartBuilder::on(&root)
+    // Build and configure the chart on the left 80% map area.
+    let mut chart = ChartBuilder::on(&map_area)
         .caption("Nurse Routing Solution", ("sans-serif", 30))
         .margin(15)
         .x_label_area_size(40)
@@ -100,7 +103,7 @@ pub fn plot_map_with_path(
             }
         }
 
-        // Draw patient markers (skipping the depot points).
+        // Draw patient markers (excluding the depot).
         for &point in path_points.iter().skip(1).take(path_points.len() - 2) {
             chart
                 .draw_series(std::iter::once(Circle::new(point, 3, color.filled())))
@@ -108,41 +111,56 @@ pub fn plot_map_with_path(
         }
     }
 
-    let legend_x = max_x - (max_x - min_x) * 0.2;
-    let legend_y = max_y - (max_y - min_y) * 0.05;
+    // Draw the legend in the right 20% area.
+    legend_area.fill(&WHITE).unwrap();
+    // Use pixel coordinates within the legend_area.
+    let legend_origin = (10, 10); // starting at 10 pixels from the top-left of the legend area
+    let vertical_spacing = 20;       // reduced vertical spacing (in pixels) between items
+    let horizontal_gap = 5;         // reduced gap between text and dot (in pixels)
+    
     for (i, color) in colors.iter().enumerate() {
-        let legend_text = format!("Nurse {}", i + 1);
-        chart.draw_series(std::iter::once(Text::new(
-            legend_text,
-            (legend_x, legend_y - i as f64 * 10.0),
-            TextStyle::from(("sans-serif", 15).into_font()).color(color),
-        )))
-        .unwrap();
+        // Calculate the y position for this legend item.
+        let y = legend_origin.1 + i as i32 * vertical_spacing;
+        // Draw the nurse's label.
+        legend_area.draw(&Text::new(
+            format!("Nurse {}", i + 1),
+            (legend_origin.0, y),
+            ("sans-serif", 22).into_font().color(&BLACK),
+        )).unwrap();
+        // Assume a fixed text width of about 60 pixels; adjust if needed.
+        let dot_x = legend_origin.0 + 120 + horizontal_gap;
+        // Draw a small colored dot next to the text.
+        legend_area.draw(&Circle::new(
+            (dot_x, y+5),
+            5, // radius for the dot
+            color.filled(),
+        )).unwrap();
     }
+
     root.present().unwrap();
     println!("Solution diagram saved as {}", output_path);
 }
 
 /// Converts a color from HSL (Hue, Saturation, Lightness) to RGB (Red, Green, Blue).
 /// 
-/// # Parameters
+/// # Parameters:
 /// - `h`: The hue angle in degrees.
 /// - `s`: The saturation component (0.0 to 1.0).
 /// - `l`: The lightness component (0.0 to 1.0).
 /// 
-/// # Returns
+/// # Returns:
 /// A tuple `(r, g, b)` where each component is an 8-bit unsigned integer representing the corresponding RGB value.
 fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
     let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
     let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
     let m = l - c / 2.0;
     let (r, g, b) = match h as u32 {
-        0..=59 => (c, x, 0.0),
+        0..=59   => (c, x, 0.0),
         60..=119 => (x, c, 0.0),
-        120..=179 => (0.0, c, x),
-        180..=239 => (0.0, x, c),
-        240..=299 => (x, 0.0, c),
-        _ => (c, 0.0, x),
+        120..=179=> (0.0, c, x),
+        180..=239=> (0.0, x, c),
+        240..=299=> (x, 0.0, c),
+        _        => (c, 0.0, x),
     };
     (
         ((r + m) * 255.0) as u8,
@@ -156,7 +174,7 @@ fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
 /// This function draws two short line segments forming an arrowhead at the specified end point of a route segment.
 /// The arrow is oriented based on the provided angle, and its size is defined internally.
 /// 
-/// # Parameters
+/// # Parameters:
 /// - `chart`: A mutable reference to the chart context used for drawing.
 /// - `end`: A tuple `(f64, f64)` representing the end point of the route segment.
 /// - `angle`: The angle (in degrees) of the route segment, used to orient the arrow.
@@ -167,7 +185,6 @@ fn draw_arrow(
     angle: f64,
     color: &RGBColor,
 ) {
-    // Reduced arrow size.
     let arrow_length = 2.0;
     let angle_rad = angle.to_radians();
 
