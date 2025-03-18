@@ -1,7 +1,7 @@
 
 use std::time::Instant;
 
-use ea_components::evolutionary_algorithm::ssmga;
+use ea_components::evolutionary_algorithm::ssmga_timed;
 use utils::{
     plot_map::plot_map_with_path, 
     textual_answer::save_textual_solution_to_file, 
@@ -26,21 +26,23 @@ mod ea_components;
 /// Optionally, commented-out code is provided to run the evolutionary algorithm on multiple training instances
 /// and iteratively update a scoreboard.
 fn main() {
-    /*
-    let instance = utils::parse_data::parse_data("src/data/test/test_0.json");
+
+    let instance = utils::parse_data::parse_data("src/data/train/train_0.json");
     
     let start_time = Instant::now();
-    let best_solution = ssmga(
-            &instance,
-            30,
-            30000,
-            5,
-            0.2,
-            1.2,
-            1000,
-            1,
-            10000,
-        );
+    let best_solution = ssmga_timed(
+        &instance,
+        30,
+        300000,
+        5,
+        0.2,
+        1.2,
+        1000,
+        1,
+        10000,
+        120.0 // Stops the algorithm after 120 seconds.
+    );
+    
 
     // Calculates the elapsed time since the timer started.
     let duration = start_time.elapsed();
@@ -55,10 +57,11 @@ fn main() {
     save_textual_solution_to_file("output/solution.txt", &best_solution, &instance);
 
     let _ = save_solution_to_file(&best_solution, "output/solution.json");
-    */
+    
     // Run all training instances using the crowding algorithm.
     //TODO: Uncomment this line to run all training instances
     
+    /*
     
     let benchmarks = vec![
         //("train_0", 827.0),
@@ -89,5 +92,6 @@ fn main() {
         1,                                       // num_islands
         10000                             // migration_interval
     );
+    */
 
 } 

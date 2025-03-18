@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Instant;
 use dashmap::DashMap;
 use rand::Rng;
 use crate::{
@@ -371,6 +372,331 @@ pub fn ssmga(
                 }
 
                 // STEP 5.9: Record the current generation's best fitness.
+                fitness_history.push(
+                    fitness_values
+                        .iter()
+                        .cloned()
+                        .fold(f64::INFINITY, f64::min),
+                );
+            }
+
+            // STEP 6: Return the best solution and fitness history for this thread.
+            IslandResult {
+                best_solution: {
+                    let best_index = fitness_values
+                        .iter()
+                        .enumerate()
+                        .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                        .unwrap()
+                        .0;
+                    sub_population[best_index].clone()
+                },
+                fitness_history,
+            }
+        });
+        handles.push(handle);
+    }
+
+    // STEP 7: Aggregate results from all threads and determine the overall best solution.
+    let mut overall_best_solution = None;
+    let mut best_fitness = f64::INFINITY;
+    let mut island_results = Vec::new();
+    for (island_id, handle) in handles.into_iter().enumerate() {
+        let result: IslandResult = handle.join().unwrap();
+        island_results.push((island_id, result.fitness_history.clone()));
+        let sol_fit = fitness(&result.best_solution, instance);
+        if sol_fit < best_fitness {
+            best_fitness = sol_fit;
+            overall_best_solution = Some(result.best_solution);
+        }
+    }
+
+    // STEP 8: Plot the fitness evolution and return the best overall solution.
+    plot_fitness(&island_results);
+    overall_best_solution.unwrap()
+}
+
+/// Steady-State Memetic Genetic Algorithm (SSMGA)
+/// 
+/// The new parameter `max_seconds` defines the maximum allowed runtime (in seconds) for the evolutionary loop.
+pub fn ssmga_timed(
+    instance: &Instance,
+    population_size: usize,
+    generations: usize,
+    tournament_size: usize,
+    mutation_probability: f64,
+    lambda: f64,
+    generation_to_print: usize,
+    num_islands: usize,
+    migration_interval: usize,
+    max_seconds: f64, // New parameter: maximum runtime in seconds
+) -> Vec<Vec<usize>> {
+
+    // STEP 1: Initialize shared parameters and resources.
+    let sub_population_size = population_size / num_islands;
+    let instance_arc = Arc::new(instance.clone());
+    let fitness_cache: Arc<DashMap<String, f64>> = Arc::new(DashMap::new());
+    let migration_pool: Arc<Mutex<Vec<Vec<Vec<usize>>>>> =
+        Arc::new(Mutex::new(Vec::new()));
+
+    let mut handles = Vec::new();
+    for island_id in 0..num_islands {
+        // STEP 2: Clone shared resources for use in the spawned thread.
+        let instance = instance_arc.clone();
+        let fitness_cache = fitness_cache.clone();
+        let migration_pool = migration_pool.clone();
+        let handle = thread::spawn(move || {
+
+            // Record the start time for the island thread.
+            let start_time = Instant::now();
+
+            // STEP 3: Generate the initial sub-population and compute initial fitness values.
+            let mut sub_population = generate_population_combined(sub_population_size, &instance);
+            let mut fitness_values: Vec<f64> = sub_population
+                .iter()
+                .map(|individual| {
+                    let key = format!("{:?}", individual);
+                    if let Some(val) = fitness_cache.get(&key) {
+                        *val
+                    } else {
+                        let fit = fitness(individual, &instance);
+                        fitness_cache.insert(key, fit);
+                        fit
+                    }
+                })
+                .collect();
+
+            let get_fitness = |ind: &Vec<Vec<usize>>| -> f64 {
+                let key = format!("{:?}", ind);
+                if let Some(val) = fitness_cache.get(&key) {
+                    *val
+                } else {
+                    let fit = fitness(ind, &instance);
+                    fitness_cache.insert(key, fit);
+                    fit
+                }
+            };
+
+            let generate_random_individual = || {
+                let mut pop = generate_population_combined(1, &instance);
+                pop.remove(0)
+            };
+
+            let mut fitness_history = Vec::new();
+
+            // STEP 5: Evolutionary loop over generations.
+            for gen in 0..generations {
+                // Actively check if the thread has run longer than max_seconds.
+                if start_time.elapsed().as_secs_f64() >= max_seconds {
+                    println!("Island {}: Time limit of {} seconds reached at generation {}.", island_id, max_seconds, gen);
+                    break;
+                }
+
+                // --- Migration Step ---
+                if gen % migration_interval == 0 && gen > 0 {
+                    let best_index = fitness_values
+                        .iter()
+                        .enumerate()
+                        .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                        .unwrap()
+                        .0;
+                    let best_individual = sub_population[best_index].clone();
+
+                    let (worst_index_opt, best_migrant_opt) = {
+                        let mut pool = migration_pool.lock().unwrap();
+                        pool.push(best_individual);
+                        let worst_index = fitness_values
+                            .iter()
+                            .enumerate()
+                            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                            .unwrap()
+                            .0;
+                        if let Some((migrant_idx, _)) = pool
+                            .iter()
+                            .enumerate()
+                            .min_by(|(_, a), (_, b)| {
+                                get_fitness(a).partial_cmp(&get_fitness(b)).unwrap()
+                            })
+                        {
+                            let best_migrant = pool.remove(migrant_idx);
+                            (Some(worst_index), Some(best_migrant))
+                        } else {
+                            (None, None)
+                        }
+                    };
+
+                    if let (Some(worst_index), Some(best_migrant)) =
+                        (worst_index_opt, best_migrant_opt)
+                    {
+                        sub_population[worst_index] = best_migrant;
+                        let key = format!("{:?}", sub_population[worst_index]);
+                        let new_fit = if let Some(val) = fitness_cache.get(&key) {
+                            *val
+                        } else {
+                            let fit = fitness(&sub_population[worst_index], &instance);
+                            fitness_cache.insert(key, fit);
+                            fit
+                        };
+                        fitness_values[worst_index] = new_fit;
+                    }
+                }
+
+                // --- Diversity Step ---
+                if gen > 0 && generations >= 20 && gen % (generations / 20) == 0 {
+                    let to_replace = (sub_population_size as f64 * 0.80).ceil() as usize;
+                    let mut indices: Vec<usize> = (0..sub_population_size).collect();
+                    indices.sort_by(|&i, &j| {
+                        fitness_values[j]
+                            .partial_cmp(&fitness_values[i])
+                            .unwrap()
+                    });
+                    for k in 0..to_replace {
+                        let idx = indices[k];
+                        let new_sol = generate_random_individual();
+                        sub_population[idx] = new_sol;
+                        let key = format!("{:?}", sub_population[idx]);
+                        let new_fit = if let Some(val) = fitness_cache.get(&key) {
+                            *val
+                        } else {
+                            let fit = fitness(&sub_population[idx], &instance);
+                            fitness_cache.insert(key, fit);
+                            fit
+                        };
+                        fitness_values[idx] = new_fit;
+                    }
+                    println!(
+                        "Island {} Generation {}: Replaced {} worst individuals with random solutions.",
+                        island_id, gen, to_replace
+                    );
+                }
+
+                // --- Adaptive Parameter Calculation ---
+                let theta = 1.0 - (gen as f64) / (generations as f64);
+
+                // --- Parent Selection, Crossover, and Mutation ---
+                let (idx1, parent1) =
+                    tournament_selection_index(&sub_population, &fitness_values, tournament_size);
+                let (idx2, parent2) =
+                    tournament_selection_index(&sub_population, &fitness_values, tournament_size);
+
+                let (mut child1, mut child2) = meta_crossover(&parent1, &parent2, &instance, lambda);
+                meta_mutation(&mut child1, mutation_probability, &instance);
+                meta_mutation(&mut child2, mutation_probability, &instance);
+
+                // --- Route Improvement ---
+                route_improvement(&instance, &mut child1, &*fitness_cache);
+                route_improvement(&instance, &mut child2, &*fitness_cache);
+
+                // --- Crowding Replacement ---
+                let pairing1 = distance(&parent1, &child1) + distance(&parent2, &child2);
+                let pairing2 = distance(&parent1, &child2) + distance(&parent2, &child1);
+                let mut rng = rand::rng();
+
+                let new_ind1;
+                let new_ind2;
+                if pairing1 <= pairing2 {
+                    new_ind1 = if theta > 0.0 {
+                        let diff = get_fitness(&child1) - get_fitness(&parent1);
+                        let p = 1.0 / (1.0 + (diff / theta).exp());
+                        if rng.random::<f64>() < p {
+                            child1
+                        } else {
+                            parent1
+                        }
+                    } else {
+                        if get_fitness(&child1) < get_fitness(&parent1) {
+                            child1
+                        } else {
+                            parent1
+                        }
+                    };
+                    new_ind2 = if theta > 0.0 {
+                        let diff = get_fitness(&child2) - get_fitness(&parent2);
+                        let p = 1.0 / (1.0 + (diff / theta).exp());
+                        if rng.random::<f64>() < p {
+                            child2
+                        } else {
+                            parent2
+                        }
+                    } else {
+                        if get_fitness(&child2) < get_fitness(&parent2) {
+                            child2
+                        } else {
+                            parent2
+                        }
+                    };
+                } else {
+                    new_ind1 = if theta > 0.0 {
+                        let diff = get_fitness(&child2) - get_fitness(&parent1);
+                        let p = 1.0 / (1.0 + (diff / theta).exp());
+                        if rng.random::<f64>() < p {
+                            child2
+                        } else {
+                            parent1
+                        }
+                    } else {
+                        if get_fitness(&child2) < get_fitness(&parent1) {
+                            child2
+                        } else {
+                            parent1
+                        }
+                    };
+                    new_ind2 = if theta > 0.0 {
+                        let diff = get_fitness(&child1) - get_fitness(&parent2);
+                        let p = 1.0 / (1.0 + (diff / theta).exp());
+                        if rng.random::<f64>() < p {
+                            child1
+                        } else {
+                            parent2
+                        }
+                    } else {
+                        if get_fitness(&child1) < get_fitness(&parent2) {
+                            child1
+                        } else {
+                            parent2
+                        }
+                    };
+                }
+
+                // --- Update Population ---
+                sub_population[idx1] = new_ind1;
+                sub_population[idx2] = new_ind2;
+                {
+                    let key = format!("{:?}", sub_population[idx1]);
+                    let new_fit = if let Some(val) = fitness_cache.get(&key) {
+                        *val
+                    } else {
+                        let fit = fitness(&sub_population[idx1], &instance);
+                        fitness_cache.insert(key, fit);
+                        fit
+                    };
+                    fitness_values[idx1] = new_fit;
+                }
+                {
+                    let key = format!("{:?}", sub_population[idx2]);
+                    let new_fit = if let Some(val) = fitness_cache.get(&key) {
+                        *val
+                    } else {
+                        let fit = fitness(&sub_population[idx2], &instance);
+                        fitness_cache.insert(key, fit);
+                        fit
+                    };
+                    fitness_values[idx2] = new_fit;
+                }
+
+                // --- Logging ---
+                if gen % generation_to_print == 0 {
+                    let best_fit = fitness_values
+                        .iter()
+                        .cloned()
+                        .fold(f64::INFINITY, f64::min);
+                    println!(
+                        "Island {} Generation {}: Best fitness = {}",
+                        island_id, gen, best_fit
+                    );
+                }
+
+                // --- Record Fitness History ---
                 fitness_history.push(
                     fitness_values
                         .iter()
