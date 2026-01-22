@@ -13,6 +13,38 @@ mod utils;
 mod ea_components;
 mod examples;
 
+/// Test function to validate a solution
+#[allow(dead_code)]
+fn test_solution_validator() {
+    use utils::parse_data::parse_data;
+    use utils::solution_validator::validate_and_print;
+    use std::fs;
+    
+    println!("\n=== Testing Solution Validator ===\n");
+    
+    // Load the instance
+    let instance = parse_data("src/data/test/test_1.json");
+    
+    // Load the solution from JSON
+    let solution_json = fs::read_to_string("output/scoring_test/test_1/solution.json")
+        .expect("Failed to read solution file");
+    let solution: Vec<Vec<usize>> = serde_json::from_str(&solution_json)
+        .expect("Failed to parse solution JSON");
+    
+    println!("Validating solution for test_1...\n");
+    
+    // Validate and print result
+    let is_feasible = validate_and_print(&solution, &instance);
+    
+    if is_feasible {
+        println!("\nThe solution satisfies all constraints!");
+    } else {
+        println!("\nThe solution violates some constraints. See details above.");
+    }
+    
+    println!("\n=== Validation Complete ===\n");
+}
+
 /// Test function to demonstrate instance generator
 #[allow(dead_code)]
 fn test_instance_generator() {
@@ -67,7 +99,7 @@ fn test_instance_generator() {
 /// Optionally, commented-out code is provided to run the evolutionary algorithm on multiple training instances
 /// and iteratively update a scoreboard.
 fn main() {
-    // Optimize the new random instances
+    // Optimize the new random instances with integer values
     let new_instances = vec![
         ("random_instance_1", 0.0),
         ("random_instance_2", 0.0),

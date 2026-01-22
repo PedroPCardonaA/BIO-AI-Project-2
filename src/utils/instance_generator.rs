@@ -66,27 +66,27 @@ pub fn generate_random_instance(config: InstanceConfig) -> Instance {
     // Generate random capacity
     let capacity_nurse = rng.random_range(config.capacity_nurse_range.0..=config.capacity_nurse_range.1);
     
-    // Generate random depot
+    // Generate random depot with integer coordinates and return time
     let depot = Depot {
-        return_time: rng.random_range(config.depot_return_time_range.0..=config.depot_return_time_range.1),
-        x_coord: rng.random_range(config.depot_x_range.0..=config.depot_x_range.1),
-        y_coord: rng.random_range(config.depot_y_range.0..=config.depot_y_range.1),
+        return_time: rng.random_range(config.depot_return_time_range.0 as i32..=config.depot_return_time_range.1 as i32) as f64,
+        x_coord: rng.random_range(config.depot_x_range.0 as i32..=config.depot_x_range.1 as i32) as f64,
+        y_coord: rng.random_range(config.depot_y_range.0 as i32..=config.depot_y_range.1 as i32) as f64,
     };
     
     // Generate random number of patients
     let nbr_patients = rng.random_range(config.nbr_patients_range.0..=config.nbr_patients_range.1);
     
-    // Generate random patients
+    // Generate random patients with integer values
     let mut patients = HashMap::new();
     for i in 1..=nbr_patients {
-        let start_time = rng.random_range(config.time_window_start_range.0..=config.time_window_start_range.1);
-        let duration = rng.random_range(config.time_window_duration_range.0..=config.time_window_duration_range.1);
-        let care_time = rng.random_range(config.patient_care_time_range.0..=config.patient_care_time_range.1);
+        let start_time = rng.random_range(config.time_window_start_range.0 as i32..=config.time_window_start_range.1 as i32) as f64;
+        let duration = rng.random_range(config.time_window_duration_range.0 as i32..=config.time_window_duration_range.1 as i32) as f64;
+        let care_time = rng.random_range(config.patient_care_time_range.0 as i32..=config.patient_care_time_range.1 as i32) as f64;
         
         let patient = Patient {
-            x_coord: rng.random_range(config.patient_x_range.0..=config.patient_x_range.1),
-            y_coord: rng.random_range(config.patient_y_range.0..=config.patient_y_range.1),
-            demand: rng.random_range(config.patient_demand_range.0..=config.patient_demand_range.1),
+            x_coord: rng.random_range(config.patient_x_range.0 as i32..=config.patient_x_range.1 as i32) as f64,
+            y_coord: rng.random_range(config.patient_y_range.0 as i32..=config.patient_y_range.1 as i32) as f64,
+            demand: rng.random_range(config.patient_demand_range.0 as i32..=config.patient_demand_range.1 as i32) as f64,
             start_time,
             end_time: start_time + duration,
             care_time,
