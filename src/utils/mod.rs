@@ -4,3 +4,5 @@ pub mod plot_map;
 pub mod plot_metrics;
 pub mod textual_answer;
 pub mod score_recorder;
+pub mod instance_generator;
+pub mod instance_generator_cli;

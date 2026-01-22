@@ -176,7 +176,15 @@ where
         // Process each benchmark instance.
         for (instance_name, benchmark) in benchmarks.iter() {
             // Parse the instance from its JSON file.
-            let file_path = format!("src/data/test/{}.json", instance_name);
+            // Check in new, test, and train directories
+            let file_path = if std::path::Path::new(&format!("src/data/new/{}.json", instance_name)).exists() {
+                format!("src/data/new/{}.json", instance_name)
+            } else if std::path::Path::new(&format!("src/data/test/{}.json", instance_name)).exists() {
+                format!("src/data/test/{}.json", instance_name)
+            } else {
+                format!("src/data/train/{}.json", instance_name)
+            };
+            
             println!("Processing instance: {}", instance_name);
             let instance = parse_data(&file_path);
 

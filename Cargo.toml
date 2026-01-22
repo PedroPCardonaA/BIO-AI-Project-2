@@ -2,11 +2,30 @@
 name = "project_2"
 version = "0.1.0"
 edition = "2021"
+resolver = "2"
 
 [dependencies]
 dashmap = "6.1.0"
 plotters = "0.3.7"
 rand = "0.9.0"
 rayon = "1.10.0"
-serde = {version ="1.0.217", features = ["derive"]}
+serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"
+
+# Fast edit/compile iteration but still reasonable runtime for dev
+[profile.dev]
+opt-level = 1
+debug = true
+
+# Max throughput build for runs/benchmarks
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+debug = false
+
+# If you use `cargo test`, this makes tests less painfully slow
+[profile.test]
+opt-level = 1

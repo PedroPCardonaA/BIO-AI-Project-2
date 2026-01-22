@@ -11,6 +11,47 @@ use utils::{
 mod structs;
 mod utils;
 mod ea_components;
+mod examples;
+
+/// Test function to demonstrate instance generator
+#[allow(dead_code)]
+fn test_instance_generator() {
+    use utils::instance_generator::{generate_and_save_instance, InstanceConfig};
+    
+    println!("\n=== Generating 5 Random Instances ===\n");
+    
+    // Create output directory
+    std::fs::create_dir_all("output/random_instances").ok();
+    
+    for i in 1..=5 {
+        println!("{}. Generating random instance {}...", i, i);
+        let config = InstanceConfig {
+            instance_name: format!("random_instance_{}", i),
+            ..Default::default()
+        };
+        
+        match generate_and_save_instance(
+            config,
+            &format!("output/random_instances/random_instance_{}.json", i),
+            true,
+            Some(&format!("output/random_instances/random_instance_{}_map.png", i)),
+        ) {
+            Ok(instance) => {
+                println!("   ✓ Generated: {} nurses, {} patients, capacity: {}", 
+                         instance.nbr_nurses, instance.patients.len(), instance.capacity_nurse);
+            }
+            Err(e) => eprintln!("   ✗ Error: {}", e),
+        }
+    }
+    
+    println!("\n=== Instance Generation Complete ===");
+    println!("Generated 5 instances in output/random_instances/");
+    println!("- random_instance_1.json (with map)");
+    println!("- random_instance_2.json (with map)");
+    println!("- random_instance_3.json (with map)");
+    println!("- random_instance_4.json (with map)");
+    println!("- random_instance_5.json (with map)\n");
+}
 
 /// Main method.
 /// 
@@ -26,68 +67,26 @@ mod ea_components;
 /// Optionally, commented-out code is provided to run the evolutionary algorithm on multiple training instances
 /// and iteratively update a scoreboard.
 fn main() {
-    /*
-    let instance = utils::parse_data::parse_data("src/data/test/test_0.json");
-    
-    let start_time = Instant::now();
-    let best_solution = ssmga(
-            &instance,
-            30,
-            30000,
-            5,
-            0.2,
-            1.2,
-            1000,
-            1,
-            10000,
-        );
-
-    // Calculates the elapsed time since the timer started.
-    let duration = start_time.elapsed();
-
-    // Converts the duration into seconds as a f64.
-    let secs = duration.as_secs_f64();
-
-    // Prints the elapsed time with 4 digits after the decimal point.
-    println!("Evolutionary algorithm training completed in: {:.4} seconds", secs);
-
-    plot_map_with_path(&best_solution, &instance.patients, &instance.depot, "output/solution.png");
-    save_textual_solution_to_file("output/solution.txt", &best_solution, &instance);
-
-    let _ = save_solution_to_file(&best_solution, "output/solution.json");
-    */
-    // Run all training instances using the crowding algorithm.
-    //TODO: Uncomment this line to run all training instances
-    
-    
-    let benchmarks = vec![
-        //("train_0", 827.0),
-        //("train_1", 589.0),
-        //("train_2", 1258.0),
-        //("train_3", 1132.0),
-        //("train_4", 1261.0),
-        //("train_5", 1092.0),
-        //("train_6", 924.0),
-        //("train_7", 870.0),
-        //("train_8", 731.0),
-        //("train_9", 855.0),
-        //("test_0", 826.3),
-        ("test_1", 1513.7),
-        ("test_2", 900.5),
+    // Optimize the new random instances
+    let new_instances = vec![
+        ("random_instance_1", 0.0),
+        ("random_instance_2", 0.0),
+        ("random_instance_3", 0.0),
+        ("random_instance_4", 0.0),
+        ("random_instance_5", 0.0),
     ];
 
-    // Run the evolutionary algorithm (being the designed Steady-State Memetic Genetic Algorithm) on the specified benchmarks.
+    // Run the evolutionary algorithm on the new instances
     run_trains_range(
         ssmga, 
-        benchmarks,                                           // benchmark range of instances
-        30,                                 // population_size
-        100000,                                   // generations
-        6,                                   // tournament_size
-        0.2,                            // mutation_probability
-        1.2,                                          // lambda
-        1000,                            // generation_to_print
-        1,                                       // num_islands
-        10000                             // migration_interval
+        new_instances,              // new random instances
+        30,                         // population_size
+        100000,                     // generations
+        6,                          // tournament_size
+        0.2,                        // mutation_probability
+        1.2,                        // lambda
+        1000,                       // generation_to_print
+        1,                          // num_islands
+        10000                       // migration_interval
     );
-
 } 
